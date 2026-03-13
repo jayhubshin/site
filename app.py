@@ -48,7 +48,7 @@ try:
     all_cols = get_column_names()
     
     # --- 상단 헤더 및 설정 레이아웃 (3:7 비율 적용) ---
-    header_col, config_col = st.columns([3, 7])
+    header_col, config_col = st.columns([3.5, 6.5])
 
     with header_col:
         st.title("🚀 환경부 데이터 통합 검색기")
