@@ -55,7 +55,11 @@ try:
     st.subheader("⚙️ 화면 설정")
     view_mode = st.radio("보기 방식 선택", ["상세 데이터 (충전기별)", "통합 데이터 (사이트별)"], horizontal=True)
     
-    default_cols = ['충전소명', '도로명주소', '상세위치', '충전소구분상세', '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', '설치년', '설치월']
+    default_cols = [
+        '충전소명', '도로명주소', '상세위치', '충전소구분상세', 
+        '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', 
+        '설치년', '설치년도', '설치월'
+    ]
     actual_default = [c for c in default_cols if c in all_cols]
     
     selected_display_cols = st.multiselect(
@@ -70,49 +74,72 @@ try:
     with col1:
         search_target = st.selectbox("검색할 항목(컬럼) 선택", ["전체"] + all_cols)
     with col2:
-        search_query = st.text_input("검색어 입력", placeholder="아파트 이름이나 주소를 입력하세요")
+        search_query = st.text_input("검색어 입력", placeholder="아파트 이름이나 주소를 입력하세요 (예: 산들3단지)")
 
     if search_query:
-        with st.spinner('데이터 분석 중...'):
+        with st.spinner('유관 데이터 포함 검색 중...'):
+            # 1. 1차 검색: 검색어에 해당하는 데이터 찾기
             if search_target == "전체":
                 where_clauses = [f"\"{col}\" LIKE '%{search_query}%'" for col in all_cols]
-                sql = f"SELECT * FROM env_data WHERE {' OR '.join(where_clauses)} LIMIT 3000"
+                sql_primary = f"SELECT 도로명주소 FROM env_data WHERE {' OR '.join(where_clauses)} LIMIT 1000"
             else:
-                sql = f"SELECT * FROM env_data WHERE \"{search_target}\" LIKE '%{search_query}%' LIMIT 3000"
+                sql_primary = f"SELECT 도로명주소 FROM env_data WHERE \"{search_target}\" LIKE '%{search_query}%' LIMIT 1000"
             
-            df_result = run_query(sql)
+            primary_addresses = run_query(sql_primary)
 
-            if not df_result.empty:
+            if not primary_addresses.empty:
+                # 2. 2차 검색: 검색된 데이터들의 '도로명주소'를 가진 모든 행 가져오기
+                unique_addresses = primary_addresses['도로명주소'].dropna().unique().tolist()
+                # SQL IN 구문을 위한 처리
+                address_list_str = "', '".join([addr.replace("'", "''") for addr in unique_addresses])
+                sql_final = f"SELECT * FROM env_data WHERE 도로명주소 IN ('{address_list_str}')"
+                
+                df_result = run_query(sql_final)
+
                 if view_mode == "통합 데이터 (사이트별)":
                     if '도로명주소' in df_result.columns and '충전소명' in df_result.columns:
+                        # 주소 전처리
                         df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
-                        site_map = df_result.groupby('통합주소')['충전소명'].first().to_dict()
-                        df_result['사이트명'] = df_result['통합주소'].map(site_map)
+                        
+                        # [핵심 로직] 주소(번지)와 운영기관명칭이 같아야 같은 사이트로 묶임
+                        # 운영기관명칭이 없으면 통합주소로만 묶음
+                        group_cols = ['통합주소']
+                        if '운영기관명칭' in df_result.columns:
+                            group_cols.append('운영기관명칭')
+                        
+                        # 사이트명 생성 (첫 번째 충전소명 사용)
+                        site_names = df_result.groupby(group_cols)['충전소명'].first().reset_index()
+                        site_names.rename(columns={'충전소명': '사이트명'}, inplace=True)
+                        df_result = pd.merge(df_result, site_names, on=group_cols, how='left')
                         
                         df_result['충전기대수'] = 1
-                        group_key = ['통합주소', '사이트명']
-                        agg_rules = {col: 'first' for col in selected_display_cols if col not in group_key}
+                        
+                        # 집계 규칙
+                        final_group_keys = ['통합주소', '사이트명']
+                        if '운영기관명칭' in df_result.columns:
+                            final_group_keys.append('운영기관명칭')
+                            
+                        agg_rules = {col: 'first' for col in selected_display_cols if col not in final_group_keys}
                         agg_rules['충전기대수'] = 'count'
                         
-                        final_df = df_result.groupby(group_key).agg(agg_rules).reset_index()
+                        final_df = df_result.groupby(final_group_keys).agg(agg_rules).reset_index()
                         
+                        # 컬럼 표시 정리
                         show_cols = ['사이트명', '충전기대수']
                         extra_cols = [c for c in selected_display_cols if c not in show_cols and c in final_df.columns]
                         final_show = show_cols + extra_cols
                         
                         target_df = final_df[final_show]
-                        # 인덱스를 1부터 시작하도록 수정
                         target_df.index = range(1, len(target_df) + 1)
                         
                         st.subheader(f"🔍 통합 검색 결과: {len(target_df):,}개 사이트")
                         st.dataframe(target_df, width='stretch')
                     else:
-                        st.warning("주소 정보가 부족하여 통합할 수 없습니다.")
+                        st.warning("필요한 컬럼이 없어 통합할 수 없습니다.")
                         df_result.index = range(1, len(df_result) + 1)
                         st.dataframe(df_result[selected_display_cols], width='stretch')
                         target_df = df_result
                 else:
-                    # 상세 데이터 모드에서도 인덱스를 1부터 시작
                     df_result.index = range(1, len(df_result) + 1)
                     st.subheader(f"🔍 상세 검색 결과: {len(df_result):,}건")
                     st.dataframe(df_result[selected_display_cols], width='stretch')
