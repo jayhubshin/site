@@ -1,35 +1,78 @@
 import streamlit as st
 import pandas as pd
+import gdown
+import os
 
-# 1. 구글 드라이브에서 CSV 읽기 함수 (캐싱 처리로 속도 최적화)
-@st.cache_data
-def load_data(file_id):
-    # 구글 드라이브 다운로드 URL 포맷
-    url = "https://drive.google.com/file/d/1PawLusQwMxxPqf9KKi3jx0dwfz2qrseU/view?usp=drive_link"
-    df = pd.read_csv(url)
-    return df
-# 파일 ID 입력 (본인의 파일 ID로 교체하세요)
-GOOGLE_DRIVE_FILE_ID = '여러분의_파일_ID_입력'
+# --- 설정 및 데이터 로드 함수 ---
+FILE_ID = '1PawLusQwMxxPqf9KKi3jx0dwfz2qrseU'
 
-st.title("📂 데이터 검색 서비스")
-st.write("50만 줄의 데이터를 실시간으로 검색합니다.")
-
-# 데이터 로딩
-with st.spinner('데이터를 불러오는 중입니다...'):
-    data = load_data(GOOGLE_DRIVE_FILE_ID)
-
-# 2. 검색창 구현
-search_term = st.text_input("검색어를 입력하세요 (예: 제품명, 지역 등)")
-
-# 3. 검색 로직 (전체 컬럼에서 해당 단어가 포함된 행 찾기)
-if search_term:
-    # 문자열 데이터에서 검색어 포함 여부 확인 (대소문자 무시)
-    mask = data.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
-    results = data[mask]
+@st.cache_data(show_spinner=False)
+def load_data_from_drive(file_id):
+    url = f'https://drive.google.com/uc?id={file_id}'
+    output = 'data_cache.csv'
     
-    st.write(f"🔍 검색 결과: {len(results)}건")
-    st.dataframe(results)  # 결과 표 출력
-else:
-    st.write("상단 검색창에 검색어를 입력해 주세요.")
+    # 파일이 로컬에 없을 때만 다운로드 (서버 자원 절약)
+    if not os.path.exists(output):
+        gdown.download(url, output, quiet=False)
+    
+    # 50만 줄 대응: 메모리 효율을 위해 low_memory=False 설정
+    # 만약 한글이 깨진다면 encoding='cp949' 또는 'euc-kr'을 추가하세요.
+    df = pd.read_csv(output, low_memory=False)
+    return df
 
-    st.dataframe(data.head(100)) # 초기 화면에는 상위 100개만 표시
+# --- UI 구성 ---
+st.set_page_config(page_title="환경부 데이터 검색기", layout="wide")
+
+st.title("🌊 환경부 데이터 조회 대시보드")
+st.markdown(f"**구글 드라이브 원본 파일 ID:** `{FILE_ID}`")
+
+try:
+    # 데이터 로딩 표시
+    with st.status("데이터 준비 중...", expanded=True) as status:
+        st.write("구글 드라이브 연결 확인...")
+        df = load_data_from_drive(FILE_ID)
+        st.write("데이터 구조 분석 및 색인 중...")
+        status.update(label="데이터 로드 완료!", state="complete", expanded=False)
+
+    # 상단 요약 대시보드
+    st.divider()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("총 레코드 수", f"{len(df):,} 건")
+    m2.metric("컬럼(항목) 수", f"{len(df.columns)} 개")
+    m3.metric("데이터 상태", "정상 (실시간)")
+
+    # --- 검색 영역 ---
+    st.subheader("🔍 실시간 검색")
+    
+    # 검색 방식 선택
+    search_col = st.selectbox("검색할 컬럼을 선택하세요 (전체 검색은 '전체' 선택)", ["전체"] + list(df.columns))
+    search_query = st.text_input("검색어를 입력하고 엔터를 누르세요", placeholder="예: 시설명, 주소 등")
+
+    if search_query:
+        # 50만 줄 고속 검색 로직
+        if search_col == "전체":
+            # 모든 열을 문자열로 변환하여 검색 (조금 느릴 수 있음)
+            mask = df.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
+        else:
+            # 특정 열만 타겟팅하여 검색 (훨씬 빠름)
+            mask = df[search_col].astype(str).str.contains(search_query, case=False, na=False)
+        
+        filtered_df = df[mask]
+        
+        st.write(f"결과: **{len(filtered_df):,}** 건이 검색되었습니다.")
+        st.dataframe(filtered_df, use_container_width=True)
+        
+        # 검색 결과 다운로드 버튼
+        csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
+        st.download_button("결과 CSV로 내보내기", data=csv, file_name="search_result.csv", mime="text/csv")
+    
+    else:
+        st.info("검색어를 입력하시면 결과를 확인할 수 있습니다. (현재는 상위 50건 표시)")
+        st.dataframe(df.head(50), use_container_width=True)
+
+except Exception as e:
+    st.error(f"데이터를 불러오는 중 오류가 발생했습니다.")
+    st.expander("상세 에러 보기").write(e)
+    st.info("팁: 구글 드라이브 파일의 공유 설정이 '링크가 있는 모든 사용자'로 되어 있는지 확인해 보세요.")
+
+# ---
