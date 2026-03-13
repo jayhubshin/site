@@ -28,6 +28,7 @@ def run_query(query):
 
 def extract_base_address(address):
     if not address: return ""
+    # "~~로 123", "~~길 123-4" 형식까지만 추출 (상세주소 제거)
     match = re.search(r'(.+[로|길]\s*\d+(-\d+)?)', str(address))
     return match.group(1).strip() if match else str(address).strip()
 
@@ -47,7 +48,7 @@ def get_column_names():
 try:
     all_cols = get_column_names()
     
-    # --- 상단 헤더 및 설정 레이아웃 (3:7 비율 적용) ---
+    # --- 상단 헤더 및 설정 레이아웃 (3.5:6.5 비율 적용) ---
     header_col, config_col = st.columns([3.5, 6.5])
 
     with header_col:
@@ -55,19 +56,19 @@ try:
         st.markdown("환경부 데이터를 실시간으로 조회합니다.")
 
     with config_col:
-        with st.expander("⚙️ 보기 방식 및 표시 컬럼 설정", expanded=True):
-            # 설정 내부에서도 가로로 배치하여 공간 활용
-            mode_col, col_filter_col = st.columns([1, 2])
-            with mode_col:
-                view_mode = st.radio("보기 방식", ["상세 데이터", "사이트별 통합"], horizontal=False)
-            with col_filter_col:
-                default_cols = [
-                    '충전소명', '도로명주소', '상세위치', '충전소구분상세', 
-                    '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', 
-                    '설치년', '설치년도', '설치월'
-                ]
-                actual_default = [c for c in default_cols if c in all_cols]
-                selected_display_cols = st.multiselect("표시할 컬럼을 선택하세요", options=all_cols, default=actual_default)
+        # expander를 제거하고 직접 배치
+        st.markdown("##### ⚙️ 보기 방식 및 표시 컬럼 설정")
+        inner_col1, inner_col2 = st.columns([1, 2.5])
+        with inner_col1:
+            view_mode = st.radio("보기 방식", ["상세 데이터", "사이트별 통합"], horizontal=False)
+        with inner_col2:
+            default_cols = [
+                '충전소명', '도로명주소', '상세위치', '충전소구분상세', 
+                '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', 
+                '설치년', '설치년도', '설치월'
+            ]
+            actual_default = [c for c in default_cols if c in all_cols]
+            selected_display_cols = st.multiselect("표시할 컬럼을 선택하세요", options=all_cols, default=actual_default)
 
     st.divider()
     
@@ -80,6 +81,7 @@ try:
 
     if search_query:
         with st.spinner('유관 데이터 포함 검색 중...'):
+            # 1차 주소 검색
             if search_target == "전체":
                 where_clauses = [f"\"{col}\" LIKE '%{search_query}%'" for col in all_cols]
                 sql_primary = f"SELECT 도로명주소 FROM env_data WHERE {' OR '.join(where_clauses)} LIMIT 1000"
