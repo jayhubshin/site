@@ -137,4 +137,19 @@ try:
                     st.dataframe(df_result[selected_display_cols], use_container_width=True)
                     target_df = df_result
 
-                csv = target_df.to_csv(index=False
+                csv = target_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("결과 CSV 저장", data=csv, file_name="search_results.csv")
+            else:
+                st.warning("검색 결과가 없습니다.")
+    else:
+        st.info("검색어를 입력하시면 결과를 확인할 수 있습니다.")
+        preview = run_query("SELECT * FROM env_data LIMIT 10")
+        if not preview.empty:
+            preview.index = range(1, len(preview) + 1)
+            st.dataframe(preview[selected_display_cols] if selected_display_cols else preview, use_container_width=True)
+
+except Exception as e:
+    st.error(f"시스템 오류 발생: {e}")
+
+st.divider()
+st.caption("© 2026 환경부 데이터 검색 대시보드")
