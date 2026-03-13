@@ -47,32 +47,35 @@ def get_column_names():
 try:
     all_cols = get_column_names()
     
-    # --- 상단 헤더 및 설정 레이아웃 (가로 배치) ---
-    header_col, config_col = st.columns([1, 1])
+    # --- 상단 헤더 및 설정 레이아웃 (3:7 비율 적용) ---
+    header_col, config_col = st.columns([3, 7])
 
     with header_col:
         st.title("🚀 환경부 데이터 통합 검색기")
         st.markdown("환경부 데이터를 실시간으로 조회합니다.")
 
     with config_col:
-        with st.expander("⚙️ 화면 설정 (보기 방식 및 컬럼)", expanded=True):
-            view_mode = st.radio("보기 방식", ["상세 데이터 (충전기별)", "통합 데이터 (사이트별)"], horizontal=True)
-            
-            default_cols = [
-                '충전소명', '도로명주소', '상세위치', '충전소구분상세', 
-                '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', 
-                '설치년', '설치년도', '설치월'
-            ]
-            actual_default = [c for c in default_cols if c in all_cols]
-            selected_display_cols = st.multiselect("표시 컬럼 선택", options=all_cols, default=actual_default)
+        with st.expander("⚙️ 보기 방식 및 표시 컬럼 설정", expanded=True):
+            # 설정 내부에서도 가로로 배치하여 공간 활용
+            mode_col, col_filter_col = st.columns([1, 2])
+            with mode_col:
+                view_mode = st.radio("보기 방식", ["상세 데이터", "사이트별 통합"], horizontal=False)
+            with col_filter_col:
+                default_cols = [
+                    '충전소명', '도로명주소', '상세위치', '충전소구분상세', 
+                    '운영기관명', '운영기관명칭', '충전용량', '충전기등록일시', 
+                    '설치년', '설치년도', '설치월'
+                ]
+                actual_default = [c for c in default_cols if c in all_cols]
+                selected_display_cols = st.multiselect("표시할 컬럼을 선택하세요", options=all_cols, default=actual_default)
 
     st.divider()
     
     # --- 검색 영역 ---
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        search_target = st.selectbox("검색할 항목(컬럼) 선택", ["전체"] + all_cols)
-    with col2:
+    s_col1, s_col2 = st.columns([1, 3])
+    with s_col1:
+        search_target = st.selectbox("검색 항목", ["전체"] + all_cols)
+    with s_col2:
         search_query = st.text_input("검색어 입력", placeholder="아파트 이름이나 주소를 입력하세요 (예: 산들3단지)")
 
     if search_query:
@@ -92,7 +95,7 @@ try:
                 
                 df_result = run_query(sql_final)
 
-                if view_mode == "통합 데이터 (사이트별)":
+                if view_mode == "사이트별 통합":
                     if '도로명주소' in df_result.columns and '충전소명' in df_result.columns:
                         df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
                         
@@ -134,19 +137,4 @@ try:
                     st.dataframe(df_result[selected_display_cols], use_container_width=True)
                     target_df = df_result
 
-                csv = target_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("결과 CSV 저장", data=csv, file_name="search_results.csv")
-            else:
-                st.warning("검색 결과가 없습니다.")
-    else:
-        st.info("검색어를 입력하시면 결과를 확인할 수 있습니다.")
-        preview = run_query("SELECT * FROM env_data LIMIT 10")
-        if not preview.empty:
-            preview.index = range(1, len(preview) + 1)
-            st.dataframe(preview[selected_display_cols] if selected_display_cols else preview, use_container_width=True)
-
-except Exception as e:
-    st.error(f"시스템 오류 발생: {e}")
-
-st.divider()
-st.caption("© 2026 환경부 데이터 검색 대시보드")
+                csv = target_df.to_csv(index=False
