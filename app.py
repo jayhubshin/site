@@ -78,32 +78,22 @@ try:
             if not df_result.empty:
                 if view_mode == "통합 데이터 (사이트별)":
                     if '도로명주소' in df_result.columns and '충전소명' in df_result.columns:
-                        # 1. 사이트명 매핑
+                        # 1. 주소 기반 사이트명 매핑 (동일 주소의 첫 번째 충전소명을 대표 사이트명으로 사용)
                         site_map = df_result.groupby('도로명주소')['충전소명'].first().to_dict()
                         df_result['사이트명'] = df_result['도로명주소'].map(site_map)
                         
-                        # 2. 용량 숫자 변환
-                        if '충전용량' in df_result.columns:
-                            df_result['충전용량'] = pd.to_numeric(df_result['충전용량'], errors='coerce').fillna(0)
-                        
-                        # 3. 집계 규칙 (선택된 컬럼 위주로)
+                        # 2. 집계 설정
                         df_result['충전기대수'] = 1
                         group_key = ['도로명주소', '사이트명']
                         
-                        # 집계 수행 (기존 컬럼들은 첫번째 값 유지)
+                        # 선택된 컬럼 중 그룹키가 아닌 것들만 대표값(first)으로 집계
                         agg_rules = {col: 'first' for col in selected_display_cols if col not in group_key}
                         agg_rules['충전기대수'] = 'count'
-                        if '충전용량' in df_result.columns:
-                            agg_rules['총충전용량(합계)'] = 'sum'
                         
                         final_df = df_result.groupby(group_key).agg(agg_rules).reset_index()
                         
-                        # [오류 해결 포인트] 존재하는 컬럼만 필터링해서 보여주기
+                        # 3. 컬럼 표시 순서 정리 (사이트명, 충전기대수를 맨 앞으로)
                         show_cols = ['사이트명', '충전기대수']
-                        if '총충전용량(합계)' in final_df.columns:
-                            show_cols.append('총충전용량(합계)')
-                        
-                        # 사용자가 선택한 컬럼 중 위에서 겹치지 않는 것들 추가
                         extra_cols = [c for c in selected_display_cols if c not in show_cols and c in final_df.columns]
                         final_show = show_cols + extra_cols
                         
@@ -111,7 +101,7 @@ try:
                         st.dataframe(final_df[final_show], width='stretch')
                         target_df = final_df[final_show]
                     else:
-                        st.warning("주소 정보가 부족하여 통합할 수 없습니다.")
+                        st.warning("주소 또는 충전소명 컬럼이 없어 통합할 수 없습니다.")
                         st.dataframe(df_result[selected_display_cols], width='stretch')
                         target_df = df_result
                 else:
@@ -119,6 +109,7 @@ try:
                     st.dataframe(df_result[selected_display_cols], width='stretch')
                     target_df = df_result
 
+                # CSV 다운로드 기능
                 csv = target_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("결과 CSV 저장", data=csv, file_name="search_results.csv")
             else:
@@ -127,7 +118,8 @@ try:
     else:
         st.info("검색어를 입력하시면 사이트별 통합 결과를 확인하실 수 있습니다.")
         preview = run_query("SELECT * FROM env_data LIMIT 10")
-        st.dataframe(preview[selected_display_cols] if not preview.empty else preview, width='stretch')
+        if not preview.empty:
+            st.dataframe(preview[selected_display_cols], width='stretch')
 
 except Exception as e:
     st.error(f"시스템 오류 발생: {e}")
