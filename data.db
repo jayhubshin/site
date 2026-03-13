@@ -1,9 +1,15 @@
 import pandas as pd
 import sqlite3
 
-# 엑셀/CSV 읽기
-df = pd.read_csv('환경부자료.csv') 
-# SQLite DB로 저장
+# 1. CSV 불러오기 (환경부자료_전체병합.csv)
+df = pd.read_csv('환경부자료_전체병합.csv', low_memory=False)
+
+# 2. SQLite DB 파일 생성 및 데이터 저장
 conn = sqlite3.connect('data.db')
 df.to_sql('env_data', conn, index=False, if_exists='replace')
+
+# 3. 검색 고속화를 위한 '인덱스' 생성 (검색할 컬럼명으로 교체하세요)
+# 예: '시설명' 컬럼으로 검색할 경우
+conn.execute("CREATE INDEX idx_name ON env_data(시설명)") 
 conn.close()
+print("data.db 파일 생성 완료!")
