@@ -44,13 +44,10 @@ def get_column_names():
 try:
     all_cols = get_column_names()
     
-    # --- UI 레이아웃 ---
     st.divider()
-    
     st.subheader("⚙️ 화면 설정")
     view_mode = st.radio("보기 방식 선택", ["상세 데이터 (충전기별)", "통합 데이터 (사이트별)"], horizontal=True)
     
-    # 기본 표시 컬럼 설정
     default_cols = ['충전소명', '도로명주소', '상세위치', '충전소구분상세', '운영기관명', '충전용량', '충전기등록일시', '설치년', '설치월']
     actual_default = [c for c in default_cols if c in all_cols]
     
@@ -62,7 +59,6 @@ try:
     
     st.divider()
     
-    # --- 검색 설정 ---
     col1, col2 = st.columns([1, 2])
     with col1:
         search_target = st.selectbox("검색할 항목(컬럼) 선택", ["전체"] + all_cols)
@@ -70,8 +66,7 @@ try:
         search_query = st.text_input("검색어 입력", placeholder="아파트 이름이나 주소를 입력하세요 (예: 청암1단지)")
 
     if search_query:
-        with st.spinner('데이터 분석 및 사이트 통합 중...'):
-            # 검색 쿼리 실행
+        with st.spinner('데이터 분석 중...'):
             if search_target == "전체":
                 where_clauses = [f"\"{col}\" LIKE '%{search_query}%'" for col in all_cols]
                 sql = f"SELECT * FROM env_data WHERE {' OR '.join(where_clauses)} LIMIT 3000"
@@ -82,21 +77,20 @@ try:
 
             if not df_result.empty:
                 if view_mode == "통합 데이터 (사이트별)":
-                    # 주소가 같으면 동일 사이트로 묶는 로직
                     if '도로명주소' in df_result.columns and '충전소명' in df_result.columns:
-                        # 주소별 대표 사이트명 매핑
+                        # 1. 사이트명 매핑
                         site_map = df_result.groupby('도로명주소')['충전소명'].first().to_dict()
                         df_result['사이트명'] = df_result['도로명주소'].map(site_map)
                         
-                        # 용량 숫자 변환
+                        # 2. 용량 숫자 변환
                         if '충전용량' in df_result.columns:
                             df_result['충전용량'] = pd.to_numeric(df_result['충전용량'], errors='coerce').fillna(0)
                         
-                        # 그룹화 기준 및 집계
-                        group_key = ['도로명주소', '사이트명']
+                        # 3. 집계 규칙 (선택된 컬럼 위주로)
                         df_result['충전기대수'] = 1
+                        group_key = ['도로명주소', '사이트명']
                         
-                        # 집계 규칙 생성
+                        # 집계 수행 (기존 컬럼들은 첫번째 값 유지)
                         agg_rules = {col: 'first' for col in selected_display_cols if col not in group_key}
                         agg_rules['충전기대수'] = 'count'
                         if '충전용량' in df_result.columns:
@@ -104,16 +98,18 @@ try:
                         
                         final_df = df_result.groupby(group_key).agg(agg_rules).reset_index()
                         
-                        # 출력 컬럼 정리
-                        cols_to_show = ['사이트명', '충전기대수']
-                        if '총충전용량(합계)' in agg_rules:
-                            cols_to_show.append('총충전용량(합계)')
-                        cols_to_show += [c for c in selected_display_cols if c not in cols_to_show]
+                        # [오류 해결 포인트] 존재하는 컬럼만 필터링해서 보여주기
+                        show_cols = ['사이트명', '충전기대수']
+                        if '총충전용량(합계)' in final_df.columns:
+                            show_cols.append('총충전용량(합계)')
                         
-                        # 에러 발생 지점 수정 완료
+                        # 사용자가 선택한 컬럼 중 위에서 겹치지 않는 것들 추가
+                        extra_cols = [c for c in selected_display_cols if c not in show_cols and c in final_df.columns]
+                        final_show = show_cols + extra_cols
+                        
                         st.subheader(f"🔍 통합 검색 결과: {len(final_df):,}개 사이트")
-                        st.dataframe(final_df[cols_to_show], width='stretch')
-                        target_df = final_df
+                        st.dataframe(final_df[final_show], width='stretch')
+                        target_df = final_df[final_show]
                     else:
                         st.warning("주소 정보가 부족하여 통합할 수 없습니다.")
                         st.dataframe(df_result[selected_display_cols], width='stretch')
@@ -123,7 +119,6 @@ try:
                     st.dataframe(df_result[selected_display_cols], width='stretch')
                     target_df = df_result
 
-                # CSV 다운로드
                 csv = target_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button("결과 CSV 저장", data=csv, file_name="search_results.csv")
             else:
@@ -132,7 +127,7 @@ try:
     else:
         st.info("검색어를 입력하시면 사이트별 통합 결과를 확인하실 수 있습니다.")
         preview = run_query("SELECT * FROM env_data LIMIT 10")
-        st.dataframe(preview[selected_display_cols], width='stretch')
+        st.dataframe(preview[selected_display_cols] if not preview.empty else preview, width='stretch')
 
 except Exception as e:
     st.error(f"시스템 오류 발생: {e}")
