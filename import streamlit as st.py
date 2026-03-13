@@ -5,7 +5,7 @@ import pandas as pd
 @st.cache_data
 def load_data(file_id):
     # 구글 드라이브 다운로드 URL 포맷
-    url = https://drive.google.com/file/d/1PawLusQwMxxPqf9KKi3jx0dwfz2qrseU/view?usp=drive_link
+    url = "https://drive.google.com/file/d/1PawLusQwMxxPqf9KKi3jx0dwfz2qrseU/view?usp=drive_link"
     df = pd.read_csv(url)
     return df
 # 파일 ID 입력 (본인의 파일 ID로 교체하세요)
@@ -31,4 +31,5 @@ if search_term:
     st.dataframe(results)  # 결과 표 출력
 else:
     st.write("상단 검색창에 검색어를 입력해 주세요.")
+
     st.dataframe(data.head(100)) # 초기 화면에는 상위 100개만 표시
