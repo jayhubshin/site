@@ -1,0 +1,9 @@
+import pandas as pd
+import sqlite3
+
+# 엑셀/CSV 읽기
+df = pd.read_csv('환경부자료.csv') 
+# SQLite DB로 저장
+conn = sqlite3.connect('data.db')
+df.to_sql('env_data', conn, index=False, if_exists='replace')
+conn.close()
