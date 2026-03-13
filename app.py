@@ -8,7 +8,6 @@ import os
 DB_NAME = 'data.db'
 ZIP_NAME = 'data.db.zip'
 
-# 1. 압축 파일이 있다면 자동으로 해제하는 로직
 def prepare_db():
     if not os.path.exists(DB_NAME):
         if os.path.exists(ZIP_NAME):
@@ -18,9 +17,7 @@ def prepare_db():
             st.error("데이터 파일(data.db 또는 data.db.zip)을 찾을 수 없습니다.")
             st.stop()
 
-# 2. 고속 DB 조회 함수
 def run_query(query):
-    # check_same_thread=False: Streamlit 멀티스레딩 환경 대응
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     try:
         df = pd.read_sql_query(query, conn)
@@ -28,16 +25,14 @@ def run_query(query):
         conn.close()
     return df
 
-# --- 페이지 설정 (2026 표준) ---
+# --- 페이지 설정 ---
 st.set_page_config(page_title="환경부 고속 검색 시스템", layout="wide")
 
 st.title("🚀 환경부 데이터 통합 검색기")
-st.markdown("50만 줄의 데이터를 실시간으로 조회합니다.")
+st.markdown("환경부 데이터를 실시간으로 조회합니다.")
 
-# DB 준비 실행
 prepare_db()
 
-# 3. 컬럼 목록 가져오기 (캐싱 처리로 속도 향상)
 @st.cache_data
 def get_column_names():
     conn = sqlite3.connect(DB_NAME)
@@ -47,45 +42,67 @@ def get_column_names():
     return cols
 
 try:
-    cols = get_column_names()
+    all_cols = get_column_names()
     
-    # --- 검색 UI 영역 ---
+    # --- UI 레이아웃 ---
     st.divider()
-    col1, col2 = st.columns([1, 2])
     
+    # 1. 컬럼 표시 필터 (멀티셀렉트)
+    default_cols = ['충전소명', '도로명주소', '상세위치', '충전소구분상세', '운영기관명', '충전용량', '충전기등록일시', '설치년', '설치월']
+    # 실제 데이터에 해당 컬럼이 있는지 확인 후 기본값 설정
+    actual_default = [c for c in default_cols if c in all_cols]
+    
+    st.subheader("⚙️ 보기 설정")
+    selected_display_cols = st.multiselect(
+        "표시할 컬럼을 선택하세요", 
+        options=all_cols, 
+        default=actual_default
+    )
+    
+    st.divider()
+    
+    # 2. 검색 설정
+    col1, col2 = st.columns([1, 2])
     with col1:
-        search_target = st.selectbox("검색할 항목(컬럼) 선택", cols)
+        # "전체" 옵션 추가
+        search_target = st.selectbox("검색할 항목(컬럼) 선택", ["전체"] + all_cols)
     with col2:
-        search_query = st.text_input("검색어 입력 (예: 서울, 강남, 업체명 등)", placeholder="입력 후 Enter를 눌러주세요")
+        search_query = st.text_input("검색어 입력", placeholder="검색어를 입력하고 Enter를 눌러주세요")
 
-    # --- 검색 실행 및 결과 출력 ---
+    # --- 검색 로직 ---
     if search_query:
         with st.spinner('데이터베이스 탐색 중...'):
-            # SQL LIKE 문으로 고속 검색 (대소문자 무시)
-            # 보안을 위해 쿼리 파라미터 방식을 권장하지만, 간단한 검색을 위해 f-string 사용
-            sql = f"SELECT * FROM env_data WHERE \"{search_target}\" LIKE '%{search_query}%' LIMIT 1000"
+            if search_target == "전체":
+                # 모든 컬럼에 대해 OR 조건 생성 (성능을 위해 상위 1000건 제한)
+                where_clauses = [f"\"{col}\" LIKE '%{search_query}%'" for col in all_cols]
+                sql = f"SELECT * FROM env_data WHERE {' OR '.join(where_clauses)} LIMIT 1000"
+            else:
+                sql = f"SELECT * FROM env_data WHERE \"{search_target}\" LIKE '%{search_query}%' LIMIT 1000"
+            
             result = run_query(sql)
             
         st.subheader(f"🔍 검색 결과: {len(result):,}건")
-        if len(result) >= 1000:
-            st.warning("결과가 너무 많아 상위 1,000건만 표시합니다. 검색어를 더 구체적으로 입력해보세요.")
         
-        # 2026년 최신 표준: width='stretch' 사용
-        st.dataframe(result, width='stretch')
+        # 필터링된 컬럼만 출력 (사용자가 선택한 컬럼이 있을 때만)
+        display_df = result[selected_display_cols] if selected_display_cols else result
         
-        # 검색 결과 다운로드 버튼
-        csv = result.to_csv(index=False).encode('utf-8-sig')
+        st.dataframe(display_df, width='stretch')
+        
+        # 다운로드 버튼
+        csv = display_df.to_csv(index=False).encode('utf-8-sig')
         st.download_button("결과를 CSV로 저장", data=csv, file_name="search_results.csv", mime="text/csv")
 
     else:
         st.info("검색어를 입력하시면 결과를 확인할 수 있습니다.")
-        # 초기 화면: 최신 데이터 10건 미리보기
         st.write("📋 데이터 미리보기 (상위 10건)")
-        st.dataframe(run_query("SELECT * FROM env_data LIMIT 10"), width='stretch')
+        preview_df = run_query("SELECT * FROM env_data LIMIT 10")
+        # 미리보기에서도 필터 적용
+        display_preview = preview_df[selected_display_cols] if selected_display_cols else preview_df
+        st.dataframe(display_preview, width='stretch')
 
 except Exception as e:
     st.error(f"시스템 오류가 발생했습니다: {e}")
-    st.info("GitHub에 'data.db' 또는 'data.db.zip' 파일이 정상적으로 올라갔는지 확인해주세요.")
+    st.info("데이터베이스의 컬럼명과 코드에 설정된 기본 컬럼명이 일치하는지 확인해주세요.")
 
 st.divider()
 st.caption("© 2026 환경부 데이터 검색 대시보드 | Powered by SQLite & Streamlit")
