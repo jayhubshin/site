@@ -102,7 +102,7 @@ try:
 
                 with tab1:
                     # 탭 안에서 컬럼 수정 가능하도록 multiselect 배치
-                    requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '운영개시일', '설치년도']
+                    requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '운영개시일', '충전기등록일시']
                     display_options = ['사이트명', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
                     actual_default = [c for c in requested_cols if c in display_options]
                     
