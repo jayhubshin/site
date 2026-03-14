@@ -50,8 +50,16 @@ def parse_lat_lon(df):
             df = df[(df['lat'] > 32) & (df['lat'] < 40) & (df['lon'] > 124) & (df['lon'] < 132)]
     return df
 
+# --- 스타일링 함수 추가 ---
+def style_by_operator(row):
+    """운영기관명칭에 따라 행 배경색을 결정합니다."""
+    # 에버온 포함 시 옅은 파랑, 아니면 옅은 빨강
+    is_everon = '에버온' in str(row.get('운영기관명칭', ''))
+    bg_color = '#E3F2FD' if is_everon else '#FFEBEE'
+    return [f'background-color: {bg_color}'] * len(row)
+
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.2", layout="wide")
+st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.3", layout="wide")
 prepare_db()
 
 @st.cache_data
@@ -63,7 +71,7 @@ def get_column_names():
 # --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
-    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.2.2")
+    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.2.3")
     
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
@@ -123,9 +131,12 @@ try:
 
                     final_df = final_display_df[[c for c in selected_cols if c in final_display_df.columns]].copy()
                     
+                    # 스타일 적용
+                    styled_final_df = final_df.style.apply(style_by_operator, axis=1)
+
                     # 행 선택 기능
                     event = st.dataframe(
-                        final_df, use_container_width=True, hide_index=True,
+                        styled_final_df, use_container_width=True, hide_index=True,
                         on_select="rerun", selection_mode="single-row"
                     )
 
@@ -140,7 +151,6 @@ try:
                     site_list = ["선택 안 함"] + target_df_site['사이트명'].tolist()
                     default_idx = site_list.index(selected_site_from_table) if selected_site_from_table in site_list else 0
                     
-                    # 입력란 레이아웃 조정 (세로 정렬 맞춤)
                     c1, c2 = st.columns([1, 2])
                     with c1:
                         target_site = st.selectbox("기록할 사이트", options=site_list, index=default_idx)
@@ -156,10 +166,8 @@ try:
                                 st.success(f"'{target_site}' 저장 완료!")
                                 st.rerun()
                         else:
-                            # 안내 메시지 위치를 selectbox와 나란히 맞춤
                             current_memo = "💡 목록에서 행을 클릭하면 저장 버튼이 활성화됩니다."
-                            memo_text = st.text_area("내용 입력 (기록 후 저장 버튼 클릭)", value=current_memo, height=100)
-                            #st.info("💡 목록에서 행을 클릭하면 기록 창이 활성화됩니다.")
+                            memo_text = st.text_area("내용 입력 (기록 후 저장 버튼 클릭)", value=current_memo, height=100, disabled=True)
 
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
@@ -191,7 +199,9 @@ try:
                 with tab3:
                     st.subheader("🏢 운영기관별 요약")
                     op_sum = df_result.groupby('운영기관명칭').agg(사이트수=('사이트명', 'nunique'), 총충전기수=('충전기대수', 'sum')).reset_index().sort_values('총충전기수', ascending=False)
-                    st.dataframe(op_sum, use_container_width=True, hide_index=True)
+                    # 통계 테이블에도 색상 적용
+                    styled_op_sum = op_sum.style.apply(style_by_operator, axis=1)
+                    st.dataframe(styled_op_sum, use_container_width=True, hide_index=True)
             else:
                 st.warning("결과가 없습니다.")
     else:
