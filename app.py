@@ -38,7 +38,7 @@ def parse_lat_lon(df):
     return df
 
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템", layout="wide")
+st.set_page_config(page_title="환경부 고속 검색 시스템 v1.0", layout="wide")
 prepare_db()
 
 @st.cache_data
@@ -50,7 +50,7 @@ def get_column_names():
 # --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
-    st.title("🚀 환경부 통합 검색 & 통계 시스템")
+    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.0")
     
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
@@ -75,7 +75,7 @@ try:
             df_result = df_raw[df_raw.apply(advanced_filter, axis=1)].copy()
 
             if not df_result.empty:
-                # 데이터 전처리
+                # 데이터 전처리 및 사이트 통합
                 df_result['충전기대수'] = 1
                 df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
                 
@@ -95,7 +95,7 @@ try:
                 with m3:
                     view_mode = st.radio("📋 목록 보기 방식", ["사이트별", "충전기별"], horizontal=True)
 
-                # 보기 방식에 따른 테이블용 데이터 선택
+                # 선택된 모드에 따른 데이터 프레임 결정
                 final_display_df = target_df_site if view_mode == "사이트별" else df_result
 
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
@@ -139,8 +139,8 @@ try:
                             get_color=[255, 255, 255],
                             get_size=35,
                             size_units="'meters'",
-                            size_min_pixels=10, # 줌을 멀리해도 최소 크기 유지
-                            size_max_pixels=35, # 줌을 당겨도 너무 커지지 않게 제한
+                            size_min_pixels=10,
+                            size_max_pixels=35,
                             get_alignment_baseline="'center'",
                             get_text_anchor="'middle'",
                             font_weight=900,
