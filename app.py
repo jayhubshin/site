@@ -123,40 +123,33 @@ try:
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
                         # 투명도 적용 (140)
                         map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 140] if '에버온' in str(x) else [220, 30, 30, 140])
+                        map_df['radius'] = 15 + (map_df['충전기대수'] * 5)
                         
-                        # ScatterplotLayer: 원의 크기
                         s_layer = pdk.Layer(
                             "ScatterplotLayer", map_df, get_position='[lon, lat]',
                             get_color='color', get_radius='radius',
                             radius_min_pixels=10, radius_max_pixels=40,
                             pickable=True, stroked=True, get_line_color=[255, 255, 255]
                         )
-                        
-                        # TextLayer: 숫자의 크기를 meters 단위로 설정
                         t_layer = pdk.Layer(
                             "TextLayer",
                             map_df,
                             get_position='[lon, lat]',
                             get_text='count_text',
                             get_color=[255, 255, 255],
-                            get_size=50,                # 미터 단위일 때의 기준 크기 (조정 가능)
-                            size_units="'meters'",      # 픽셀 대신 미터 단위 사용
-                            size_min_pixels=12,         # 지도를 멀리 봐도 글자가 최소 12px은 유지되도록 설정 (매우 중요)
-                            size_max_pixels=35,         # 지도를 아주 가까이 봐도 글자가 너무 커지지 않게 제한
+                            get_size=25,
+                            size_units="'meters'",
+                            size_min_pixels=10, # 줌을 멀리해도 최소 크기 유지
+                            size_max_pixels=30, # 줌을 당겨도 너무 커지지 않게 제한
                             get_alignment_baseline="'center'",
                             get_text_anchor="'middle'",
                             font_weight=900,
                             outline_width=2,
                             outline_color=[0, 0, 0]
                         )
-                        
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
-                            initial_view_state=pdk.ViewState(
-                                latitude=map_df['lat'].median(), 
-                                longitude=map_df['lon'].median(), 
-                                zoom=14
-                            ),
+                            initial_view_state=pdk.ViewState(latitude=map_df['lat'].median(), longitude=map_df['lon'].median(), zoom=14),
                             layers=[s_layer, t_layer],
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
