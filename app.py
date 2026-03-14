@@ -178,8 +178,8 @@ try:
                                 st.success(f"'{target_site}' 메모가 저장되었습니다.")
                                 st.rerun()
                         else:
-                            # st.info("위 목록에서 사이트를 클릭하면 기록 화면이 활성화됩니다.")
-                            memo_text = st.text_area("현장 점검 내용 입력", value=current_memo, placeholder="위 목록에서 사이트를 클릭하면 기록 화면이 활성화됩니다.")
+                            st.info("위 목록에서 사이트를 클릭하면 기록 화면이 활성화됩니다.")
+                            
 
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
