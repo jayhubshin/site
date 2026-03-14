@@ -120,7 +120,7 @@ try:
                         s_layer = pdk.Layer(
                             "ScatterplotLayer", map_df, get_position='[lon, lat]',
                             get_color='color', get_radius='radius',
-                            radius_min_pixels=18, radius_max_pixels=45,
+                            radius_min_pixels=10, radius_max_pixels=45,
                             pickable=True, stroked=True, get_line_color=[255, 255, 255]
                         )
                         t_layer = pdk.Layer(
