@@ -73,7 +73,7 @@ st.markdown("""
     }
     /* 체크박스, 라디오버튼 등 액센트 컬러 변경 */
     div[data-testid="stMarkdownContainer"] em {
-        color: #E3F2FD;
+        color: blue;
     }
     .st-be {
         background-color: #E3F2FD !important;
