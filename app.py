@@ -71,12 +71,7 @@ st.markdown("""
         padding-right: 3rem !important;
     }
     
-    /* 2. 타이틀 자체의 상단 여백 제거 */
-    h1 {
-        margin-top: -1.5rem !important;
-        padding-top: 0 !important;
-        padding-bottom: 1rem !important;
-    }
+
     /* 1. multiselect 전체 배경 및 선택된 항목(Chip) 디자인 */
     span[data-baseweb="tag"] {
         background-color: #E3F2FD !important; /* 부드러운 파란색 배경 */
