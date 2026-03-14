@@ -157,6 +157,7 @@ try:
                                 st.rerun()
                         else:
                             # 안내 메시지 위치를 selectbox와 나란히 맞춤
+                            current_memo = site_data['현장비고'].values[0]
                             memo_text = st.text_area("내용 입력 (기록 후 저장 버튼 클릭)", value=current_memo, height=100)
                             st.info("💡 목록에서 행을 클릭하면 기록 창이 활성화됩니다.")
 
