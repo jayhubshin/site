@@ -123,7 +123,7 @@ try:
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
                         # 투명도 적용 (140)
                         map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 140] if '에버온' in str(x) else [220, 30, 30, 140])
-                        map_df['radius'] = 10 + (map_df['충전기대수'] * 5)
+                        map_df['radius'] = 10 + (map_df['충전기대수'] * 10)
                         
                         s_layer = pdk.Layer(
                             "ScatterplotLayer", map_df, get_position='[lon, lat]',
