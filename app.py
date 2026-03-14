@@ -116,7 +116,7 @@ try:
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
-                    requested_cols = ['사이트명', '현장비고', '충전기대수', '도로명주소', '운영기관명칭', '설치년도']
+                    requested_cols = ['사이트명', '현장비고', '충전기대수', '도로명주소', '운영기관명칭', '설치년도', '충전기등록일시']
                     display_options = ['사이트명', '현장비고', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
                     actual_default = [c for c in requested_cols if c in display_options or c == '현장비고']
                     selected_cols = st.multiselect("📋 표시 컬럼 수정:", options=display_options, default=actual_default)
