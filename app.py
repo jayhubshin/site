@@ -123,7 +123,7 @@ try:
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
                         # 투명도 적용 (140)
                         map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 140] if '에버온' in str(x) else [220, 30, 30, 140])
-                        map_df['radius'] = 15 + (map_df['충전기대수'] * 5)
+                        map_df['radius'] = 10 + (map_df['충전기대수'] * 5)
                         
                         s_layer = pdk.Layer(
                             "ScatterplotLayer", map_df, get_position='[lon, lat]',
@@ -137,10 +137,10 @@ try:
                             get_position='[lon, lat]',
                             get_text='count_text',
                             get_color=[255, 255, 255],
-                            get_size=25,
+                            get_size=35,
                             size_units="'meters'",
                             size_min_pixels=10, # 줌을 멀리해도 최소 크기 유지
-                            size_max_pixels=30, # 줌을 당겨도 너무 커지지 않게 제한
+                            size_max_pixels=35, # 줌을 당겨도 너무 커지지 않게 제한
                             get_alignment_baseline="'center'",
                             get_text_anchor="'middle'",
                             font_weight=900,
