@@ -65,14 +65,14 @@ st.markdown("""
     <style>
     /* multiselect 선택된 항목(Chip) 배경색 변경 */
     span[data-baseweb="tag"] {
-        background-color: #0066CC !important;
+        background-color: #E3F2FD !important;
     }
     /* 체크박스, 라디오버튼 등 액센트 컬러 변경 */
     div[data-testid="stMarkdownContainer"] em {
-        color: #0066CC;
+        color: #E3F2FD;
     }
     .st-be {
-        background-color: #0066CC !important;
+        background-color: #E3F2FD !important;
     }
     </style>
     """, unsafe_allow_html=True)
