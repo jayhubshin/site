@@ -120,7 +120,6 @@ try:
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
-                    # '현장비고'를 기본 표시 컬럼에 추가
                     requested_cols = ['사이트명', '현장비고', '충전기대수', '도로명주소', '운영기관명칭', '설치년도']
                     display_options = ['사이트명', '현장비고', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
                     actual_default = [c for c in requested_cols if c in display_options or c == '현장비고']
@@ -128,45 +127,58 @@ try:
 
                     final_df = final_display_df[[c for c in selected_cols if c in final_display_df.columns]].copy()
                     
-                    # --- v1.2 핵심: 행 선택 기능 활성화 ---
+                    # 행 선택 기능 활성화
                     event = st.dataframe(
                         final_df, 
                         use_container_width=True, 
                         hide_index=True,
-                        on_select="rerun",  # 행 선택 시 즉시 반영
-                        selection_mode="single-row" # 한 줄씩 선택
+                        on_select="rerun",
+                        selection_mode="single-row"
                     )
 
-                    # 선택된 행의 데이터 추출
+                    # 1. 선택된 행의 데이터 추출
                     selected_site_from_table = None
                     if len(event.selection.rows) > 0:
                         selected_row_idx = event.selection.rows[0]
                         selected_site_from_table = final_df.iloc[selected_row_idx]['사이트명']
 
-                    # v1.2: 현장 비고 입력 섹션 (선택 연동)
                     st.divider()
                     st.subheader("📝 현장 점검 내용 기록")
                     
-                    # 테이블에서 선택했다면 해당 사이트를 기본값으로, 아니면 전체 리스트 제공
-                    site_list = target_df_site['사이트명'].tolist()
-                    default_idx = site_list.index(selected_site_from_table) if selected_site_from_table in site_list else 0
+                    # 2. 선택 리스트 구성 ("선택 안 함"을 첫 번째에 추가)
+                    site_list = ["선택 안 함"] + target_df_site['사이트명'].tolist()
+                    
+                    # 3. 기본 선택 인덱스 결정 (표에서 선택했으면 해당 인덱스, 아니면 0번 "선택 안 함")
+                    if selected_site_from_table:
+                        try:
+                            default_idx = site_list.index(selected_site_from_table)
+                        except ValueError:
+                            default_idx = 0
+                    else:
+                        default_idx = 0
                     
                     c1, c2 = st.columns([1, 2])
                     with c1:
                         target_site = st.selectbox(
-                            "기록할 사이트 선택 (목록에서 클릭하세요)", 
+                            "기록할 사이트 (목록에서 행을 클릭하세요)", 
                             options=site_list, 
                             index=default_idx
                         )
+                    
                     with c2:
-                        # 현재 선택된 사이트의 기존 메모 가져오기
-                        current_memo = target_df_site[target_df_site['사이트명'] == target_site]['현장비고'].values[0]
-                        memo_text = st.text_area("내용 입력", value=current_memo, placeholder="현장 상태를 입력하세요.")
-                        if st.button("✅ 메모 저장"):
-                            s_key = target_df_site[target_df_site['사이트명'] == target_site]['site_key'].values[0]
-                            save_memo(s_key, memo_text)
-                            st.success(f"'{target_site}' 메모가 저장되었습니다.")
-                            st.rerun()
+                        if target_site != "선택 안 함":
+                            # 실제 데이터에서 정보 추출
+                            site_data = target_df_site[target_df_site['사이트명'] == target_site]
+                            current_memo = site_data['현장비고'].values[0]
+                            
+                            memo_text = st.text_area("현장 점검 내용 입력", value=current_memo, placeholder="현장 상태를 기록하세요.")
+                            if st.button("✅ 메모 저장"):
+                                s_key = site_data['site_key'].values[0]
+                                save_memo(s_key, memo_text)
+                                st.success(f"'{target_site}' 메모가 저장되었습니다.")
+                                st.rerun()
+                        else:
+                            st.info("위 목록에서 사이트를 클릭하면 기록 화면이 활성화됩니다.")
 
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
