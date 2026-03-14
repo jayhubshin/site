@@ -118,22 +118,21 @@ try:
                 with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
-                        # 1. 점 색상 설정 (에버온: 하늘색 계열, 기타: 빨간색 계열)
+                        # 1. 색상 설정
                         map_df['color'] = map_df['운영기관명칭'].apply(
                             lambda x: [0, 102, 204, 200] if '에버온' in str(x) else [204, 0, 0, 200]
                         )
                         
-                        # 2. 충전기 대수에 따른 반지름(Radius) 계산 로직
-                        # 대수가 1대인 곳도 잘 보이게 기본값 80을 주고, 한 대당 30씩 커지도록 설정
-                        # (예: 1대=110, 5대=230, 10대=380)
-                        map_df['radius'] = 80 + (map_df['충전기대수'] * 30)
+                        # 2. 반지름 계산 (기본 30m + 대당 10m 추가)
+                        # 아파트 단지 크기를 넘지 않도록 가중치를 낮췄습니다.
+                        map_df['radius'] = 30 + (map_df['충전기대수'] * 10)
                         
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
                             initial_view_state=pdk.ViewState(
                                 latitude=map_df['lat'].median(),
                                 longitude=map_df['lon'].median(),
-                                zoom=10,
+                                zoom=14, # 조금 더 확대된 시점으로 변경
                                 pitch=0
                             ),
                             layers=[
@@ -142,7 +141,11 @@ try:
                                     map_df,
                                     get_position='[lon, lat]',
                                     get_color='color',
-                                    get_radius='radius',  # 계산된 radius 컬럼 사용
+                                    get_radius='radius',
+                                    # --- 크기 제한 설정 ---
+                                    radius_min_pixels=3,   # 멀리서 봐도 최소한 보일 크기
+                                    radius_max_pixels=25,  # 아무리 커도 25픽셀을 넘지 않음 (단지 보호)
+                                    # -------------------
                                     pickable=True,
                                     stroked=True,
                                     line_width_min_pixels=1,
