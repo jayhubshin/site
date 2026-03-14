@@ -114,7 +114,7 @@ try:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
-                        map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 230] if '에버온' in str(x) else [220, 30, 30, 230])
+                        map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 140] if '에버온' in str(x) else [220, 30, 30, 140])
                         map_df['radius'] = 50 + (map_df['충전기대수'] * 12)
                         
                         s_layer = pdk.Layer(
