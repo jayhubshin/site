@@ -17,7 +17,6 @@ def prepare_db():
             with zipfile.ZipFile(ZIP_NAME, 'r') as zip_ref:
                 zip_ref.extractall('./')
     
-    # v1.1: 메모 저장용 테이블 생성
     with sqlite3.connect(DB_NAME) as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS site_memos (
@@ -52,7 +51,7 @@ def parse_lat_lon(df):
     return df
 
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템 v1.1", layout="wide")
+st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.2", layout="wide")
 prepare_db()
 
 @st.cache_data
@@ -64,7 +63,7 @@ def get_column_names():
 # --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
-    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.1")
+    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.2.2")
     
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
@@ -89,7 +88,6 @@ try:
             df_result = df_raw[df_raw.apply(advanced_filter, axis=1)].copy()
 
             if not df_result.empty:
-                # 데이터 전처리 및 사이트 통합
                 df_result['충전기대수'] = 1
                 df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
                 
@@ -102,13 +100,12 @@ try:
                 agg_dict['충전기대수'] = 'count'
                 target_df_site = df_result.groupby(group_keys + ['사이트명']).agg(agg_dict).reset_index()
 
-                # v1.1: 메모 데이터 불러오기 및 결합
+                # 메모 데이터 결합
                 memos_df = run_query("SELECT site_key, memo FROM site_memos")
                 target_df_site['site_key'] = target_df_site['사이트명'] + "_" + target_df_site['통합주소']
-                target_df_site = pd.merge(target_df_site, memos_df, left_on='site_key', right_on='site_key', how='left')
+                target_df_site = pd.merge(target_df_site, memos_df, on='site_key', how='left')
                 target_df_site['현장비고'] = target_df_site['memo'].fillna("")
 
-                # 메트릭 표시
                 m1, m2, m3 = st.columns([2, 2, 3])
                 m1.metric("🏠 검색된 사이트 수", f"{len(target_df_site):,} 개")
                 m2.metric("🔌 검색된 총 충전기 수", f"{len(df_result):,} 대")
@@ -116,7 +113,6 @@ try:
                     view_mode = st.radio("📋 목록 보기 방식", ["사이트별", "충전기별"], horizontal=True)
 
                 final_display_df = target_df_site if view_mode == "사이트별" else df_result
-
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
@@ -127,16 +123,12 @@ try:
 
                     final_df = final_display_df[[c for c in selected_cols if c in final_display_df.columns]].copy()
                     
-                    # 행 선택 기능 활성화
+                    # 행 선택 기능
                     event = st.dataframe(
-                        final_df, 
-                        use_container_width=True, 
-                        hide_index=True,
-                        on_select="rerun",
-                        selection_mode="single-row"
+                        final_df, use_container_width=True, hide_index=True,
+                        on_select="rerun", selection_mode="single-row"
                     )
 
-                    # 1. 선택된 행의 데이터 추출
                     selected_site_from_table = None
                     if len(event.selection.rows) > 0:
                         selected_row_idx = event.selection.rows[0]
@@ -145,41 +137,27 @@ try:
                     st.divider()
                     st.subheader("📝 현장 점검 내용 기록")
                     
-                    # 2. 선택 리스트 구성 ("선택 안 함"을 첫 번째에 추가)
                     site_list = ["선택 안 함"] + target_df_site['사이트명'].tolist()
+                    default_idx = site_list.index(selected_site_from_table) if selected_site_from_table in site_list else 0
                     
-                    # 3. 기본 선택 인덱스 결정 (표에서 선택했으면 해당 인덱스, 아니면 0번 "선택 안 함")
-                    if selected_site_from_table:
-                        try:
-                            default_idx = site_list.index(selected_site_from_table)
-                        except ValueError:
-                            default_idx = 0
-                    else:
-                        default_idx = 0
-                    
+                    # 입력란 레이아웃 조정 (세로 정렬 맞춤)
                     c1, c2 = st.columns([1, 2])
                     with c1:
-                        target_site = st.selectbox(
-                            "기록할 사이트 (목록에서 행을 클릭하세요)", 
-                            options=site_list, 
-                            index=default_idx
-                        )
+                        target_site = st.selectbox("기록할 사이트", options=site_list, index=default_idx)
                     
                     with c2:
                         if target_site != "선택 안 함":
-                            # 실제 데이터에서 정보 추출
                             site_data = target_df_site[target_df_site['사이트명'] == target_site]
                             current_memo = site_data['현장비고'].values[0]
-                            
-                            memo_text = st.text_area("현장 점검 내용 입력", value=current_memo, placeholder="현장 상태를 기록하세요.")
+                            memo_text = st.text_area("내용 입력 (기록 후 저장 버튼 클릭)", value=current_memo, height=100)
                             if st.button("✅ 메모 저장"):
                                 s_key = site_data['site_key'].values[0]
                                 save_memo(s_key, memo_text)
-                                st.success(f"'{target_site}' 메모가 저장되었습니다.")
+                                st.success(f"'{target_site}' 저장 완료!")
                                 st.rerun()
                         else:
-                            st.info("위 목록에서 사이트를 클릭하면 기록 화면이 활성화됩니다.")
-                            
+                            # 안내 메시지 위치를 selectbox와 나란히 맞춤
+                            st.info("💡 목록에서 행을 클릭하면 기록 창이 활성화됩니다.")
 
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
