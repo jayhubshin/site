@@ -124,10 +124,22 @@ try:
                             pickable=True, stroked=True, get_line_color=[255, 255, 255]
                         )
                         t_layer = pdk.Layer(
-                            "TextLayer", map_df, get_position='[lon, lat]',
-                            get_text='count_text', get_color=[255, 255, 255],
-                            get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'",
-                            font_weight=900, outline_width=2, outline_color=[0, 0, 0]
+                            "TextLayer",
+                            map_df,
+                            get_position='[lon, lat]',
+                            get_text='count_text',
+                            get_color=[255, 255, 255],
+                            get_size=20,                 # 기준 크기
+                            size_units="'pixels'",       # 화면 픽셀 기준
+                            # --- 줌 대응 핵심 설정 ---
+                            size_min_pixels=12,          # 지도를 멀리서 봐도 최소 12px 유지
+                            size_max_pixels=30,          # 지도를 아주 가까이서 봐도 최대 30px 제한
+                            # -----------------------
+                            get_alignment_baseline="'center'",
+                            get_text_anchor="'middle'",
+                            font_weight=900,
+                            outline_width=2,
+                            outline_color=[0, 0, 0]
                         )
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
