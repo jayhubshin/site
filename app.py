@@ -115,7 +115,7 @@ try:
                         styled_df = styled_df.set_properties(subset=['충전기대수'], **{'text-align': 'center'})
                     st.dataframe(styled_df, use_container_width=True)
 
-               with tab2:
+              with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
                         # 1. 숫자를 문자열로 변환 (필수)
