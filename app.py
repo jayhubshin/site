@@ -59,7 +59,7 @@ try:
         search_query = st.text_input("검색어 입력 (예: '산들 !에버온')", placeholder="검색어를 입력하고 엔터를 누르세요.")
 
     if search_query:
-        with st.spinner('데이터를 분석 중입니다...'):
+        with st.spinner('데이터 분석 중...'):
             keywords = search_query.split()
             include_words = [w for w in keywords if not w.startswith('!')]
             exclude_words = [w[1:] for w in keywords if w.startswith('!') and len(w) > 1]
@@ -94,11 +94,12 @@ try:
                 m1.metric("🏠 검색된 사이트 수", f"{len(target_df):,} 개")
                 m2.metric("🔌 검색된 총 충전기 수", f"{target_df['충전기대수'].sum():,} 대")
 
-                # --- 결과 탭 (제조사별 탭 추가) ---
-                tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏭 제조사별 통계"])
+                # --- 결과 탭 ---
+                tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
-                    requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '운영개시일', '설치년도']
+                    # 기본 표시 컬럼에 '충전기등록일시' 추가
+                    requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '충전기등록일시', '설치년도']
                     display_options = ['사이트명', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
                     actual_default = [c for c in requested_cols if c in display_options]
                     selected_cols = st.multiselect("📋 표시 컬럼 수정:", options=display_options, default=actual_default)
@@ -126,34 +127,28 @@ try:
                         ))
 
                 with tab3:
-                    st.subheader("🏭 제조사별 요약 통계")
-                    if '제조사' in df_result.columns:
-                        # 1. 제조사별 사이트수 및 충전기수 집계
-                        mfr_summary = df_result.groupby('제조사').agg(
-                            사이트수=('사이트명', 'nunique'),
-                            총충전기수=('충전기대수', 'sum')
-                        ).reset_index().sort_values(by='총충전기수', ascending=False)
-                        
-                        st.dataframe(mfr_summary, use_container_width=True, hide_index=True)
+                    st.subheader("🏢 운영기관별 요약 통계")
+                    # 운영기관명칭별 사이트수 및 충전기수 집계
+                    op_summary = df_result.groupby('운영기관명칭').agg(
+                        사이트수=('사이트명', 'nunique'),
+                        총충전기수=('충전기대수', 'sum')
+                    ).reset_index().sort_values(by='총충전기수', ascending=False)
+                    
+                    st.dataframe(op_summary, use_container_width=True, hide_index=True)
 
-                        # 2. 제조사별 설치년도별 추이
-                        st.divider()
-                        st.subheader("📅 제조사별 설치년도 추이")
-                        if '설치년도' in df_result.columns:
-                            # 설치년도 데이터 정제 (숫자만 추출)
-                            df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
-                            mfr_year_summary = df_result.groupby(['제조사', '설치년도_clean']).agg(
-                                충전기대수=('충전기대수', 'sum'),
-                                사이트수=('사이트명', 'nunique')
-                            ).reset_index()
-                            
-                            # 차트 라이브러리 대신 깔끔한 테이블로 표시
-                            st.write("제조사/년도별 상세 현황")
-                            st.dataframe(mfr_year_summary, use_container_width=True, hide_index=True)
-                        else:
-                            st.info("데이터에 '설치년도' 정보가 없습니다.")
+                    # 운영기관별 설치년도별 추이
+                    st.divider()
+                    st.subheader("📅 운영기관별 설치년도 추이")
+                    if '설치년도' in df_result.columns:
+                        df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
+                        op_year_summary = df_result.groupby(['운영기관명칭', '설치년도_clean']).agg(
+                            충전기대수=('충전기대수', 'sum'),
+                            사이트수=('사이트명', 'nunique')
+                        ).reset_index().sort_values(by=['운영기관명칭', '설치년도_clean'], ascending=[True, False])
+                        
+                        st.dataframe(op_year_summary, use_container_width=True, hide_index=True)
                     else:
-                        st.error("데이터에 '제조사' 컬럼이 존재하지 않습니다. 컬럼명을 확인해주세요.")
+                        st.info("데이터에 '설치년도' 정보가 없습니다.")
 
             else:
                 st.warning("결과가 없습니다.")
