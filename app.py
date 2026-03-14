@@ -47,7 +47,7 @@ def get_column_names():
         cursor = conn.execute("SELECT * FROM env_data LIMIT 1")
         return [description[0] for description in cursor.description]
 
-# --- 3. 메인 로직 시작 ---
+# --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
     st.title("🚀 환경부 통합 검색 & 통계 시스템")
@@ -56,7 +56,7 @@ try:
     with s_col1:
         search_target = st.selectbox("검색 항목", ["전체"] + all_cols)
     with s_col2:
-        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')", placeholder="검색어를 입력하고 엔터를 누르세요.")
+        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')", placeholder="검색어를 입력하세요.")
 
     if search_query:
         with st.spinner('데이터 분석 중...'):
@@ -75,7 +75,7 @@ try:
             df_result = df_raw[df_raw.apply(advanced_filter, axis=1)].copy()
 
             if not df_result.empty:
-                # 공통 가공
+                # 데이터 가공
                 df_result['충전기대수'] = 1
                 df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
                 
@@ -84,21 +84,21 @@ try:
                 site_map.rename(columns={'충전소명': '사이트명'}, inplace=True)
                 df_result = pd.merge(df_result, site_map, on=group_keys, how='left')
 
-                # 사이트별 통합 데이터 집계
+                # 사이트별 통합 집계
                 agg_dict = {col: 'first' for col in df_result.columns if col not in group_keys + ['사이트명', '충전기대수']}
                 agg_dict['충전기대수'] = 'count'
                 target_df = df_result.groupby(group_keys + ['사이트명']).agg(agg_dict).reset_index()
 
-                # --- 요약 지표 ---
+                # 요약 지표
                 m1, m2 = st.columns(2)
                 m1.metric("🏠 검색된 사이트 수", f"{len(target_df):,} 개")
                 m2.metric("🔌 검색된 총 충전기 수", f"{target_df['충전기대수'].sum():,} 대")
 
-                # --- 결과 탭 ---
+                # --- 탭 구성 ---
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
-                    # 기본 표시 컬럼에 '충전기등록일시' 추가
+                    # 표시 컬럼 설정
                     requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '충전기등록일시', '설치년도']
                     display_options = ['사이트명', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
                     actual_default = [c for c in requested_cols if c in display_options]
@@ -115,110 +115,39 @@ try:
                         styled_df = styled_df.set_properties(subset=['충전기대수'], **{'text-align': 'center'})
                     st.dataframe(styled_df, use_container_width=True)
 
-              with tab2:
+                with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
-                        # 1. 숫자를 문자열로 변환 (필수)
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
+                        map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 230] if '에버온' in str(x) else [220, 30, 30, 230])
+                        map_df['radius'] = 50 + (map_df['충전기대수'] * 12)
                         
-                        # 2. 색상 및 반지름 설정
-                        map_df['color'] = map_df['운영기관명칭'].apply(
-                            lambda x: [0, 102, 204, 230] if '에버온' in str(x) else [220, 30, 30, 230]
+                        s_layer = pdk.Layer(
+                            "ScatterplotLayer", map_df, get_position='[lon, lat]',
+                            get_color='color', get_radius='radius',
+                            radius_min_pixels=18, radius_max_pixels=45,
+                            pickable=True, stroked=True, get_line_color=[255, 255, 255]
                         )
-                        # 원 크기 (글자가 들어갈 충분한 공간 확보)
-                        map_df['radius'] = 60 + (map_df['충전기대수'] * 12)
-                        
-                        # 3. 레이어 설정
-                        # (1) 배경 원 레이어
-                        scatterplot_layer = pdk.Layer(
-                            "ScatterplotLayer",
-                            map_df,
-                            get_position='[lon, lat]',
-                            get_color='color',
-                            get_radius='radius',
-                            radius_min_pixels=18,  # 글씨가 잘 안 보이지 않도록 최소 크기 상향
-                            radius_max_pixels=45,
-                            pickable=True,
-                            stroked=True,
-                            line_width_min_pixels=1,
-                            get_line_color=[255, 255, 255]
+                        t_layer = pdk.Layer(
+                            "TextLayer", map_df, get_position='[lon, lat]',
+                            get_text='count_text', get_color=[255, 255, 255],
+                            get_size=20, get_alignment_baseline="'center'", get_text_anchor="'middle'",
+                            font_weight=900, outline_width=2, outline_color=[0, 0, 0]
                         )
-                        
-                        # (2) 숫자 텍스트 레이어 (원보다 나중에 정의하여 위로 올림)
-                        text_layer = pdk.Layer(
-                            "TextLayer",
-                            map_df,
-                            get_position='[lon, lat]',
-                            get_text='count_text',
-                            get_color=[255, 255, 255], # 흰색 글자
-                            get_size=20,               # 글자 크기 대폭 상향
-                            size_scale=1,              # 줌에 따른 크기 유지
-                            get_alignment_baseline="'center'",
-                            get_text_anchor="'middle'",
-                            font_family="'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif",
-                            font_weight=900,           # 가장 굵게
-                            outline_width=2,           # 글자 테두리 추가 (가독성 핵심)
-                            outline_color=[0, 0, 0]    # 검은색 테두리
-                        )
-                        
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
-                            initial_view_state=pdk.ViewState(
-                                latitude=map_df['lat'].median(),
-                                longitude=map_df['lon'].median(),
-                                zoom=14
-                            ),
-                            # 레이어 순서 중요: 뒤에 있는 것이 위로 올라옵니다.
-                            layers=[scatterplot_layer, text_layer],
+                            initial_view_state=pdk.ViewState(latitude=map_df['lat'].median(), longitude=map_df['lon'].median(), zoom=14),
+                            layers=[s_layer, t_layer],
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
-                    else:
-                        st.warning("지도에 표시할 유효한 좌표가 없습니다.")
-                with tab3:
-                    st.subheader("🏢 운영기관별 요약 통계")
-                    # 운영기관명칭별 사이트수 및 충전기수 집계
-                    op_summary = df_result.groupby('운영기관명칭').agg(
-                        사이트수=('사이트명', 'nunique'),
-                        총충전기수=('충전기대수', 'sum')
-                    ).reset_index().sort_values(by='총충전기수', ascending=False)
-                    
-                    st.dataframe(op_summary, use_container_width=True, hide_index=True)
 
-                    # --- 연도별 운영기관 추이로 변경 ---
+                with tab3:
+                    st.subheader("🏢 운영기관별 요약")
+                    op_sum = df_result.groupby('운영기관명칭').agg(사이트수=('사이트명', 'nunique'), 총충전기수=('충전기대수', 'sum')).reset_index().sort_values('총충전기수', ascending=False)
+                    st.dataframe(op_sum, use_container_width=True, hide_index=True)
+                    
                     st.divider()
                     st.subheader("📅 연도별 운영기관 설치 추이")
                     if '설치년도' in df_result.columns:
-                        # 설치년도 데이터 정제
                         df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
-                        
-                        # 연도별-운영기관별로 그룹화 순서 변경
-                        year_op_summary = df_result.groupby(['설치년도_clean', '운영기관명칭']).agg(
-                            충전기수=('충전기대수', 'sum'),
-                            사이트수=('사이트명', 'nunique')
-                        ).reset_index()
-                        
-                        # 최신 연도 순, 충전기 많은 순으로 정렬
-                        year_op_summary = year_op_summary.sort_values(
-                            by=['설치년도_clean', '충전기수'], 
-                            ascending=[False, False]
-                        )
-                        
-                        # 컬럼명 정리 및 출력
-                        year_op_summary.columns = ['설치년도', '운영기관명칭', '충전기수', '사이트수']
-                        st.write("각 연도별로 가장 많이 설치한 운영기관 순으로 표시됩니다.")
-                        st.dataframe(year_op_summary, use_container_width=True, hide_index=True)
-                        
-                        # (선택 사항) 피벗 테이블 형태로 보고 싶을 경우 아래 코드 추가 가능
-                        # st.write("📊 연도별 운영기관 설치 현황 (피벗 테이블)")
-                        # pivot_df = year_op_summary.pivot(index='설치년도', columns='운영기관명칭', values='충전기수').fillna(0)
-                        # st.dataframe(pivot_df)
-                    else:
-                        st.info("데이터에 '설치년도' 정보가 없습니다.")
-
-            else:
-                st.warning("결과가 없습니다.")
-    else:
-        st.info("검색어를 입력하세요.")
-
-except Exception as e:
-    st.error(f"오류 발생: {e}")
+                        yr_op_sum = df_result.groupby(['설치년도_clean', '
