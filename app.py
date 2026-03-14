@@ -65,7 +65,7 @@ st.markdown("""
     <style>
     /* multiselect 선택된 항목(Chip) 배경색 변경 */
     span[data-baseweb="tag"] {
-        background-color: #E3F2FD !important;
+        background-color: blue !important;
     }
     /* 2. 칩 내부의 X 아이콘 색상도 흰색으로 변경 */
     span[data-baseweb="tag"] svg {
