@@ -171,7 +171,7 @@ try:
                             map_df['color_b'] = map_df['운영기관명칭'].apply(lambda x: 255 if '에버온' in str(x) else 0)
                             view_state = pdk.ViewState(latitude=map_df['lat'].mean(), longitude=map_df['lon'].mean(), zoom=11)
                             layer = pdk.Layer("ScatterplotLayer", map_df, get_position='[lon, lat]', 
-                                              get_color='[color_r, 0, color_b, 160]', get_radius=150, pickable=True)
+                                              get_color='[color_r, 0, color_b, 160]', get_radius=50, pickable=True)
                             tooltip = {"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                             st.pydeck_chart(pdk.Deck(layers=[layer], initial_view_state=view_state, tooltip=tooltip))
                         else:
