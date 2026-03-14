@@ -118,14 +118,17 @@ try:
                 with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
-                        # 1. 색상 및 반지름 설정
+                        # 1. 텍스트 표시를 위해 충전기대수를 문자열로 변환 (중요!)
+                        map_df['count_text'] = map_df['충전기대수'].astype(str)
+                        
+                        # 2. 색상 및 반지름 설정
                         map_df['color'] = map_df['운영기관명칭'].apply(
                             lambda x: [0, 102, 204, 230] if '에버온' in str(x) else [220, 30, 30, 230]
                         )
-                        # 원 크기는 숫자가 들어갈 수 있도록 최소 크기를 조금 확보합니다.
-                        map_df['radius'] = 40 + (map_df['충전기대수'] * 8)
+                        # 숫자가 들어갈 공간 확보를 위해 기본 반지름을 조금 더 키움
+                        map_df['radius'] = 50 + (map_df['충전기대수'] * 10)
                         
-                        # 2. 레이어 설정
+                        # 3. 레이어 설정
                         # (1) 배경 원 레이어
                         scatterplot_layer = pdk.Layer(
                             "ScatterplotLayer",
@@ -133,10 +136,11 @@ try:
                             get_position='[lon, lat]',
                             get_color='color',
                             get_radius='radius',
-                            radius_min_pixels=12,  # 숫자가 보여야 하므로 최소 픽셀을 확보
-                            radius_max_pixels=30,
+                            radius_min_pixels=15,  # 숫자가 보일 수 있는 최소 크기 확보
+                            radius_max_pixels=40,
                             pickable=True,
                             stroked=True,
+                            line_width_min_pixels=1,
                             get_line_color=[255, 255, 255]
                         )
                         
@@ -145,12 +149,14 @@ try:
                             "TextLayer",
                             map_df,
                             get_position='[lon, lat]',
-                            get_text='충전기대수',
+                            get_text='count_text', # 문자열로 변환된 컬럼 사용
                             get_color=[255, 255, 255], # 숫자 색상 (흰색)
-                            get_size=15,
-                            get_alignment_baseline="'center'", # 세로 중앙 정렬
-                            get_text_anchor="'middle'",        # 가로 중앙 정렬
-                            font_family="'Arial', sans-serif"
+                            get_size=16,               # 글자 크기
+                            size_units="'pixels'",     # 크기 단위를 픽셀로 고정
+                            get_alignment_baseline="'center'",
+                            get_text_anchor="'middle'",
+                            font_family="'Arial', sans-serif",
+                            font_weight=700            # 글자 굵게
                         )
                         
                         st.pydeck_chart(pdk.Deck(
@@ -160,7 +166,7 @@ try:
                                 longitude=map_df['lon'].median(),
                                 zoom=14
                             ),
-                            layers=[scatterplot_layer, text_layer], # 두 레이어를 겹쳐서 표시
+                            layers=[scatterplot_layer, text_layer],
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
                     else:
