@@ -126,28 +126,46 @@ try:
                     actual_default = [c for c in requested_cols if c in display_options or c == '현장비고']
                     selected_cols = st.multiselect("📋 표시 컬럼 수정:", options=display_options, default=actual_default)
 
-                    def style_rows(row):
-                        color = '#E3F2FD' if '에버온' in str(row['운영기관명칭']) else '#FFEBEE'
-                        return [f'background-color: {color}'] * len(row)
-
                     final_df = final_display_df[[c for c in selected_cols if c in final_display_df.columns]].copy()
-                    final_df.index = range(1, len(final_df) + 1)
-                    styled_df = final_df.style.apply(style_rows, axis=1)
-                    st.dataframe(styled_df, use_container_width=True)
+                    
+                    # --- v1.2 핵심: 행 선택 기능 활성화 ---
+                    event = st.dataframe(
+                        final_df, 
+                        use_container_width=True, 
+                        hide_index=True,
+                        on_select="rerun",  # 행 선택 시 즉시 반영
+                        selection_mode="single-row" # 한 줄씩 선택
+                    )
 
-                    # v1.1: 현장 비고 입력 섹션 (목록 탭 하단)
+                    # 선택된 행의 데이터 추출
+                    selected_site_from_table = None
+                    if len(event.selection.rows) > 0:
+                        selected_row_idx = event.selection.rows[0]
+                        selected_site_from_table = final_df.iloc[selected_row_idx]['사이트명']
+
+                    # v1.2: 현장 비고 입력 섹션 (선택 연동)
                     st.divider()
                     st.subheader("📝 현장 점검 내용 기록")
+                    
+                    # 테이블에서 선택했다면 해당 사이트를 기본값으로, 아니면 전체 리스트 제공
+                    site_list = target_df_site['사이트명'].tolist()
+                    default_idx = site_list.index(selected_site_from_table) if selected_site_from_table in site_list else 0
+                    
                     c1, c2 = st.columns([1, 2])
                     with c1:
-                        target_site = st.selectbox("기록할 사이트 선택", options=target_df_site['사이트명'].tolist())
+                        target_site = st.selectbox(
+                            "기록할 사이트 선택 (목록에서 클릭하세요)", 
+                            options=site_list, 
+                            index=default_idx
+                        )
                     with c2:
+                        # 현재 선택된 사이트의 기존 메모 가져오기
                         current_memo = target_df_site[target_df_site['사이트명'] == target_site]['현장비고'].values[0]
-                        memo_text = st.text_area("내용 입력", value=current_memo, placeholder="현장 상태, 점검 이력 등을 입력하세요.")
+                        memo_text = st.text_area("내용 입력", value=current_memo, placeholder="현장 상태를 입력하세요.")
                         if st.button("✅ 메모 저장"):
                             s_key = target_df_site[target_df_site['사이트명'] == target_site]['site_key'].values[0]
                             save_memo(s_key, memo_text)
-                            st.success(f"'{target_site}' 메모가 저장되었습니다. (새로고침 시 반영)")
+                            st.success(f"'{target_site}' 메모가 저장되었습니다.")
                             st.rerun()
 
                 with tab2:
