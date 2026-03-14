@@ -59,7 +59,7 @@ def style_by_operator(row):
     return [f'background-color: {bg_color}'] * len(row)
 
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.5", layout="wide")
+st.set_page_config(page_title="환경부 통합 검색 & 통계 시스템 v1.2.5", layout="wide")
 
 st.markdown("""
     <style>
@@ -113,7 +113,7 @@ def get_column_names():
 # --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
-    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.2.3")
+    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.2.5")
     
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
