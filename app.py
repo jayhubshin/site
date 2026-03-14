@@ -67,6 +67,10 @@ st.markdown("""
     span[data-baseweb="tag"] {
         background-color: #E3F2FD !important;
     }
+    /* 2. 칩 내부의 X 아이콘 색상도 흰색으로 변경 */
+    span[data-baseweb="tag"] svg {
+        fill: blue !important;
+    }
     /* 체크박스, 라디오버튼 등 액센트 컬러 변경 */
     div[data-testid="stMarkdownContainer"] em {
         color: #E3F2FD;
