@@ -16,11 +16,25 @@ def prepare_db():
         if os.path.exists(ZIP_NAME):
             with zipfile.ZipFile(ZIP_NAME, 'r') as zip_ref:
                 zip_ref.extractall('./')
+    
+    # v1.1: 메모 저장용 테이블 생성
+    with sqlite3.connect(DB_NAME) as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS site_memos (
+                site_key TEXT PRIMARY KEY, 
+                memo TEXT,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
     return True
 
 def run_query(query):
     with sqlite3.connect(DB_NAME, check_same_thread=False) as conn:
         return pd.read_sql_query(query, conn)
+
+def save_memo(site_key, memo_text):
+    with sqlite3.connect(DB_NAME) as conn:
+        conn.execute("INSERT OR REPLACE INTO site_memos (site_key, memo) VALUES (?, ?)", (site_key, memo_text))
 
 def extract_base_address(address):
     if not address: return ""
@@ -38,7 +52,7 @@ def parse_lat_lon(df):
     return df
 
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템 v1.0", layout="wide")
+st.set_page_config(page_title="환경부 고속 검색 시스템 v1.1", layout="wide")
 prepare_db()
 
 @st.cache_data
@@ -50,7 +64,7 @@ def get_column_names():
 # --- 3. 메인 로직 ---
 try:
     all_cols = get_column_names()
-    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.0")
+    st.title("🚀 환경부 통합 검색 & 통계 시스템 v1.1")
     
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
@@ -88,22 +102,28 @@ try:
                 agg_dict['충전기대수'] = 'count'
                 target_df_site = df_result.groupby(group_keys + ['사이트명']).agg(agg_dict).reset_index()
 
-                # --- 상단 메트릭 및 보기 방식 라디오 버튼 ---
+                # v1.1: 메모 데이터 불러오기 및 결합
+                memos_df = run_query("SELECT site_key, memo FROM site_memos")
+                target_df_site['site_key'] = target_df_site['사이트명'] + "_" + target_df_site['통합주소']
+                target_df_site = pd.merge(target_df_site, memos_df, left_on='site_key', right_on='site_key', how='left')
+                target_df_site['현장비고'] = target_df_site['memo'].fillna("")
+
+                # 메트릭 표시
                 m1, m2, m3 = st.columns([2, 2, 3])
                 m1.metric("🏠 검색된 사이트 수", f"{len(target_df_site):,} 개")
                 m2.metric("🔌 검색된 총 충전기 수", f"{len(df_result):,} 대")
                 with m3:
                     view_mode = st.radio("📋 목록 보기 방식", ["사이트별", "충전기별"], horizontal=True)
 
-                # 선택된 모드에 따른 데이터 프레임 결정
                 final_display_df = target_df_site if view_mode == "사이트별" else df_result
 
                 tab1, tab2, tab3 = st.tabs(["📊 검색결과 목록", "📍 지도 분포", "🏢 운영기관별 통계"])
 
                 with tab1:
-                    requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '충전기등록일시', '설치년도']
-                    display_options = ['사이트명', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
-                    actual_default = [c for c in requested_cols if c in display_options]
+                    # '현장비고'를 기본 표시 컬럼에 추가
+                    requested_cols = ['사이트명', '현장비고', '충전기대수', '도로명주소', '운영기관명칭', '설치년도']
+                    display_options = ['사이트명', '현장비고', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
+                    actual_default = [c for c in requested_cols if c in display_options or c == '현장비고']
                     selected_cols = st.multiselect("📋 표시 컬럼 수정:", options=display_options, default=actual_default)
 
                     def style_rows(row):
@@ -113,15 +133,27 @@ try:
                     final_df = final_display_df[[c for c in selected_cols if c in final_display_df.columns]].copy()
                     final_df.index = range(1, len(final_df) + 1)
                     styled_df = final_df.style.apply(style_rows, axis=1)
-                    if '충전기대수' in final_df.columns:
-                        styled_df = styled_df.set_properties(subset=['충전기대수'], **{'text-align': 'center'})
                     st.dataframe(styled_df, use_container_width=True)
+
+                    # v1.1: 현장 비고 입력 섹션 (목록 탭 하단)
+                    st.divider()
+                    st.subheader("📝 현장 점검 내용 기록")
+                    c1, c2 = st.columns([1, 2])
+                    with c1:
+                        target_site = st.selectbox("기록할 사이트 선택", options=target_df_site['사이트명'].tolist())
+                    with c2:
+                        current_memo = target_df_site[target_df_site['사이트명'] == target_site]['현장비고'].values[0]
+                        memo_text = st.text_area("내용 입력", value=current_memo, placeholder="현장 상태, 점검 이력 등을 입력하세요.")
+                        if st.button("✅ 메모 저장"):
+                            s_key = target_df_site[target_df_site['사이트명'] == target_site]['site_key'].values[0]
+                            save_memo(s_key, memo_text)
+                            st.success(f"'{target_site}' 메모가 저장되었습니다. (새로고침 시 반영)")
+                            st.rerun()
 
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
                     if not map_df.empty:
                         map_df['count_text'] = map_df['충전기대수'].astype(str)
-                        # 투명도 적용 (140)
                         map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 140] if '에버온' in str(x) else [220, 30, 30, 140])
                         map_df['radius'] = 10 + (map_df['충전기대수'] * 10)
                         
@@ -132,42 +164,23 @@ try:
                             pickable=True, stroked=True, get_line_color=[255, 255, 255]
                         )
                         t_layer = pdk.Layer(
-                            "TextLayer",
-                            map_df,
-                            get_position='[lon, lat]',
-                            get_text='count_text',
-                            get_color=[255, 255, 255],
-                            get_size=35,
-                            size_units="'meters'",
-                            size_min_pixels=10,
-                            size_max_pixels=35,
-                            get_alignment_baseline="'center'",
-                            get_text_anchor="'middle'",
-                            font_weight=900,
-                            outline_width=2,
-                            outline_color=[0, 0, 0]
+                            "TextLayer", map_df, get_position='[lon, lat]', get_text='count_text',
+                            get_color=[255, 255, 255], get_size=35, size_units="'meters'",
+                            size_min_pixels=10, size_max_pixels=35,
+                            get_alignment_baseline="'center'", get_text_anchor="'middle'",
+                            font_weight=900, outline_width=2, outline_color=[0, 0, 0]
                         )
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
                             initial_view_state=pdk.ViewState(latitude=map_df['lat'].median(), longitude=map_df['lon'].median(), zoom=14),
                             layers=[s_layer, t_layer],
-                            tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
+                            tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>비고: {현장비고}"}
                         ))
 
                 with tab3:
                     st.subheader("🏢 운영기관별 요약")
                     op_sum = df_result.groupby('운영기관명칭').agg(사이트수=('사이트명', 'nunique'), 총충전기수=('충전기대수', 'sum')).reset_index().sort_values('총충전기수', ascending=False)
                     st.dataframe(op_sum, use_container_width=True, hide_index=True)
-                    
-                    st.divider()
-                    st.subheader("📅 연도별 운영기관 설치 추이")
-                    if '설치년도' in df_result.columns:
-                        df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
-                        yr_op_sum = df_result.groupby(['설치년도_clean', '운영기관명칭']).agg(충전기수=('충전기대수', 'sum'), 사이트수=('사이트명', 'nunique')).reset_index()
-                        yr_op_sum = yr_op_sum.sort_values(['설치년도_clean', '충전기수'], ascending=[False, False])
-                        st.dataframe(yr_op_sum, use_container_width=True, hide_index=True)
-                    else:
-                        st.info("데이터에 '설치년도' 정보가 없습니다.")
             else:
                 st.warning("결과가 없습니다.")
     else:
