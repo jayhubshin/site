@@ -136,17 +136,34 @@ try:
                     
                     st.dataframe(op_summary, use_container_width=True, hide_index=True)
 
-                    # 운영기관별 설치년도별 추이
+                    # --- 연도별 운영기관 추이로 변경 ---
                     st.divider()
-                    st.subheader("📅 운영기관별 설치년도 추이")
+                    st.subheader("📅 연도별 운영기관 설치 추이")
                     if '설치년도' in df_result.columns:
+                        # 설치년도 데이터 정제
                         df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
-                        op_year_summary = df_result.groupby(['운영기관명칭', '설치년도_clean']).agg(
-                            충전기대수=('충전기대수', 'sum'),
-                            사이트수=('사이트명', 'nunique')
-                        ).reset_index().sort_values(by=['운영기관명칭', '설치년도_clean'], ascending=[True, False])
                         
-                        st.dataframe(op_year_summary, use_container_width=True, hide_index=True)
+                        # 연도별-운영기관별로 그룹화 순서 변경
+                        year_op_summary = df_result.groupby(['설치년도_clean', '운영기관명칭']).agg(
+                            충전기수=('충전기대수', 'sum'),
+                            사이트수=('사이트명', 'nunique')
+                        ).reset_index()
+                        
+                        # 최신 연도 순, 충전기 많은 순으로 정렬
+                        year_op_summary = year_op_summary.sort_values(
+                            by=['설치년도_clean', '충전기수'], 
+                            ascending=[False, False]
+                        )
+                        
+                        # 컬럼명 정리 및 출력
+                        year_op_summary.columns = ['설치년도', '운영기관명칭', '충전기수', '사이트수']
+                        st.write("각 연도별로 가장 많이 설치한 운영기관 순으로 표시됩니다.")
+                        st.dataframe(year_op_summary, use_container_width=True, hide_index=True)
+                        
+                        # (선택 사항) 피벗 테이블 형태로 보고 싶을 경우 아래 코드 추가 가능
+                        # st.write("📊 연도별 운영기관 설치 현황 (피벗 테이블)")
+                        # pivot_df = year_op_summary.pivot(index='설치년도', columns='운영기관명칭', values='충전기수').fillna(0)
+                        # st.dataframe(pivot_df)
                     else:
                         st.info("데이터에 '설치년도' 정보가 없습니다.")
 
