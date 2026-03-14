@@ -129,10 +129,10 @@ try:
                             get_position='[lon, lat]',
                             get_text='count_text',
                             get_color=[255, 255, 255],
-                            get_size=20,                 # 기준 크기
+                            get_size=30,                 # 기준 크기
                             size_units="'meters'",       # 화면 픽셀 기준
                             # --- 줌 대응 핵심 설정 ---
-                            size_min_pixels=7,          # 지도를 멀리서 봐도 최소 12px 유지
+                            size_min_pixels=3,          # 지도를 멀리서 봐도 최소 12px 유지
                             size_max_pixels=30,          # 지도를 아주 가까이서 봐도 최대 30px 제한
                             # -----------------------
                             get_alignment_baseline="'center'",
