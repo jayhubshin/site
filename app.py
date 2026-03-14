@@ -117,13 +117,6 @@ try:
                         styled_df = styled_df.set_properties(subset=['충전기대수'], **{'text-align': 'center'})
                     st.dataframe(styled_df, use_container_width=True)
 
-               pydeck의 TextLayer에서 size_units="'meters'"를 사용하면 지도의 줌 레벨에 따라 글씨 크기가 실제 지표면의 미터 단위 크기처럼 정교하게 반응합니다.
-
-하지만 meters 단위를 쓰면 줌을 멀리했을 때 글씨가 너무 작아져서 안 보일 수 있으므로, size_min_pixels 설정을 통해 최소한의 가독성을 확보하는 것이 중요합니다.
-
-수정된 [tab2: 지도 분포] 부분의 코드입니다. 이 부분만 교체하시거나 참고하세요.
-
-Python
                 with tab2:
                     map_df = parse_lat_lon(target_df_site.copy())
                     if not map_df.empty:
