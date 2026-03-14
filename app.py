@@ -65,7 +65,7 @@ st.markdown("""
     <style>
     /* 1. 상단 공백(여백) 제거 */
     .block-container {
-        padding-top: 1rem !important;    /* 기본 약 6rem에서 1rem으로 대폭 축소 */
+        padding-top: 1.2rem !important;    /* 기본 약 6rem에서 1rem으로 대폭 축소 */
         padding-bottom: 0rem !important;
         padding-left: 3rem !important;
         padding-right: 3rem !important;
