@@ -118,40 +118,49 @@ try:
                 with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
-                        # 1. 색상 설정
+                        # 1. 색상 및 반지름 설정
                         map_df['color'] = map_df['운영기관명칭'].apply(
-                            lambda x: [0, 102, 204, 200] if '에버온' in str(x) else [204, 0, 0, 200]
+                            lambda x: [0, 102, 204, 230] if '에버온' in str(x) else [220, 30, 30, 230]
+                        )
+                        # 원 크기는 숫자가 들어갈 수 있도록 최소 크기를 조금 확보합니다.
+                        map_df['radius'] = 40 + (map_df['충전기대수'] * 8)
+                        
+                        # 2. 레이어 설정
+                        # (1) 배경 원 레이어
+                        scatterplot_layer = pdk.Layer(
+                            "ScatterplotLayer",
+                            map_df,
+                            get_position='[lon, lat]',
+                            get_color='color',
+                            get_radius='radius',
+                            radius_min_pixels=12,  # 숫자가 보여야 하므로 최소 픽셀을 확보
+                            radius_max_pixels=30,
+                            pickable=True,
+                            stroked=True,
+                            get_line_color=[255, 255, 255]
                         )
                         
-                        # 2. 반지름 계산 (기본 30m + 대당 10m 추가)
-                        # 아파트 단지 크기를 넘지 않도록 가중치를 낮췄습니다.
-                        map_df['radius'] = 30 + (map_df['충전기대수'] * 10)
+                        # (2) 숫자 텍스트 레이어
+                        text_layer = pdk.Layer(
+                            "TextLayer",
+                            map_df,
+                            get_position='[lon, lat]',
+                            get_text='충전기대수',
+                            get_color=[255, 255, 255], # 숫자 색상 (흰색)
+                            get_size=15,
+                            get_alignment_baseline="'center'", # 세로 중앙 정렬
+                            get_text_anchor="'middle'",        # 가로 중앙 정렬
+                            font_family="'Arial', sans-serif"
+                        )
                         
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
                             initial_view_state=pdk.ViewState(
                                 latitude=map_df['lat'].median(),
                                 longitude=map_df['lon'].median(),
-                                zoom=14, # 조금 더 확대된 시점으로 변경
-                                pitch=0
+                                zoom=14
                             ),
-                            layers=[
-                                pdk.Layer(
-                                    "ScatterplotLayer",
-                                    map_df,
-                                    get_position='[lon, lat]',
-                                    get_color='color',
-                                    get_radius='radius',
-                                    # --- 크기 제한 설정 ---
-                                    radius_min_pixels=3,   # 멀리서 봐도 최소한 보일 크기
-                                    radius_max_pixels=25,  # 아무리 커도 25픽셀을 넘지 않음 (단지 보호)
-                                    # -------------------
-                                    pickable=True,
-                                    stroked=True,
-                                    line_width_min_pixels=1,
-                                    get_line_color=[255, 255, 255]
-                                )
-                            ],
+                            layers=[scatterplot_layer, text_layer], # 두 레이어를 겹쳐서 표시
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
                     else:
