@@ -244,7 +244,7 @@ try:
                             map_style="light",
                             initial_view_state=pdk.ViewState(latitude=map_df['lat'].median(), longitude=map_df['lon'].median(), zoom=14),
                             layers=[s_layer, t_layer],
-                            tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>비고: {현장비고}"}
+                            tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭} {충전기대수} 기<br/>비고: {현장비고}"}
                         ))
 
                 with tab3:
