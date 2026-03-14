@@ -5,7 +5,7 @@ import zipfile
 import os
 import re
 
-# 지도 관련 라이브러리 (pip install streamlit-folium folium 필욕)
+# 지도 관련 라이브러리
 try:
     from streamlit_folium import st_folium
     import folium
@@ -13,33 +13,25 @@ try:
 except ImportError:
     HAS_MAP_LIBS = False
 
-# --- 파일 및 DB 설정 ---
+# --- 설정 및 데이터 로드 최적화 ---
 DB_NAME = 'data.db'
 ZIP_NAME = 'data.db.zip'
 
+@st.cache_resource
 def prepare_db():
     if not os.path.exists(DB_NAME):
         if os.path.exists(ZIP_NAME):
             with zipfile.ZipFile(ZIP_NAME, 'r') as zip_ref:
                 zip_ref.extractall('./')
-        else:
-            st.error("데이터 파일(data.db 또는 data.db.zip)을 찾을 수 없습니다.")
-            st.stop()
+    return True
 
-def run_query(query):
+@st.cache_data
+def get_all_data():
+    """전체 데이터를 한 번만 로드하여 메모리에 캐싱합니다."""
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
-    try:
-        df = pd.read_sql_query(query, conn)
-    finally:
-        conn.close()
-    return df
-
-def extract_base_address(address):
-    if not address: return ""
-    match = re.search(r'(.+[로|길]\s*\d+(-\d+)?)', str(address))
-    return match.group(1).strip() if match else str(address).strip()
-
-def parse_lat_lon(df):
+    df = pd.read_sql_query("SELECT * FROM env_data", conn)
+    conn.close()
+    # 좌표 파싱을 로드 시점에 미리 해두면 검색이 더 빨라집니다.
     if '위치정보' in df.columns:
         coords = df['위치정보'].astype(str).str.split(',', expand=True)
         if coords.shape[1] >= 2:
@@ -47,161 +39,110 @@ def parse_lat_lon(df):
             df['lon'] = pd.to_numeric(coords[1], errors='coerce')
     return df
 
-# --- 페이지 설정 ---
+# --- 앱 실행 ---
 st.set_page_config(page_title="환경부 고속 검색 시스템", layout="wide")
 prepare_db()
 
+# 데이터 로드 (캐싱됨)
 try:
-    # 컬럼명 미리 가져오기
-    all_cols = run_query("SELECT * FROM env_data LIMIT 1").columns.tolist()
-    
-    # --- 상단 레이아웃 (3.5:6.5) ---
-    header_col, config_col = st.columns([3.5, 6.5])
+    full_df = get_all_data()
+    all_cols = full_df.columns.tolist()
 
+    # 상단 레이아웃
+    header_col, config_col = st.columns([3.5, 6.5])
     with header_col:
         st.title("🚀 환경부 통합 검색 & 지도")
-        st.markdown("단어 순서 무관 검색 / 제외어(`!`) 지원 / 개별 마커 지도")
+        st.caption("한 번 검색하면 결과가 유지됩니다.")
 
     with config_col:
-        st.markdown("##### ⚙️ 보기 방식 및 표시 컬럼 설정")
+        st.markdown("##### ⚙️ 설정")
         inner_col1, inner_col2, inner_col3 = st.columns([1, 2, 1])
         with inner_col1:
-            view_mode = st.radio("보기 방식", ["상세 데이터", "사이트별 통합"], horizontal=False)
+            view_mode = st.radio("보기 방식", ["상세 데이터", "사이트별 통합"])
         with inner_col2:
             default_cols = ['충전소명', '도로명주소', '운영기관명칭', '충전용량', '설치년도', '위치정보']
-            actual_default = [c for c in default_cols if c in all_cols]
-            selected_display_cols = st.multiselect("표시 컬럼 선택", options=all_cols, default=actual_default)
+            selected_display_cols = st.multiselect("표시 컬럼", options=all_cols, default=[c for c in default_cols if c in all_cols])
         with inner_col3:
             map_style = st.selectbox("지도 스타일", ["OpenStreetMap", "CartoDB positron", "CartoDB dark_matter"])
 
     st.divider()
-    
-    # --- 검색 영역 ---
+
+    # 검색바
     s_col1, s_col2 = st.columns([1, 3])
     with s_col1:
         search_target = st.selectbox("검색 항목", ["전체"] + all_cols)
     with s_col2:
-        search_query = st.text_input("검색어 입력", placeholder="예: '산들 !에버온' (단어 순서 무관, !는 제외)")
+        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')", key="search_input")
 
+    # --- 핵심: 검색 로직 분리 ---
     if search_query:
-        with st.spinner('데이터 분석 및 필터링 중...'):
-            # 1. 검색어 파싱
-            keywords = search_query.split()
-            include_words = [w for w in keywords if not w.startswith('!')]
-            exclude_words = [w[1:] for w in keywords if w.startswith('!') and len(w) > 1]
+        # 1. 필터링 (메모리 내 검색으로 매우 빠름)
+        keywords = search_query.split()
+        include_words = [w for w in keywords if not w.startswith('!')]
+        exclude_words = [w[1:] for w in keywords if w.startswith('!') and len(w) > 1]
 
-            # 2. SQL 1차 검색 (포함 단어 기준 주소 확보)
+        # 타겟 컬럼 지정
+        target_df = full_df if search_target == "전체" else full_df[[search_target] + ['도로명주소', '충전소명', '운영기관명칭', 'lat', 'lon'] + selected_display_cols]
+        
+        # 포함 단어 필터링
+        filtered_df = full_df.copy()
+        for word in include_words:
             if search_target == "전체":
-                sub_queries = [f"(도로명주소 LIKE '%{word}%' OR 충전소명 LIKE '%{word}%')" for word in include_words]
-                where_clause = " AND ".join(sub_queries) if sub_queries else "1=1"
-                sql_primary = f"SELECT 도로명주소 FROM env_data WHERE {where_clause} LIMIT 2000"
+                filtered_df = filtered_df[filtered_df.apply(lambda r: r.astype(str).str.contains(word).any(), axis=1)]
             else:
-                sub_queries = [f"\"{search_target}\" LIKE '%{word}%'" for word in include_words]
-                where_clause = " AND ".join(sub_queries) if sub_queries else "1=1"
-                sql_primary = f"SELECT 도로명주소 FROM env_data WHERE {where_clause} LIMIT 2000"
+                filtered_df = filtered_df[filtered_df[search_target].astype(str).str.contains(word)]
+        
+        # 제외 단어 필터링
+        for word in exclude_words:
+            filtered_df = filtered_df[~filtered_df.apply(lambda r: r.astype(str).str.contains(word).any(), axis=1)]
+
+        if not filtered_df.empty:
+            # 2. 데이터 가공
+            filtered_df['충전기대수'] = 1
+            if view_mode == "사이트별 통합":
+                # 사이트 통합 로직
+                group_keys = ['도로명주소', '운영기관명칭']
+                agg_rules = {col: 'first' for col in selected_display_cols if col not in group_keys}
+                agg_rules['충전기대수'] = 'count'
+                agg_rules['lat'] = 'first'
+                agg_rules['lon'] = 'first'
+                agg_rules['충전소명'] = 'first'
+                display_df = filtered_df.groupby(group_keys).agg(agg_rules).reset_index()
+                display_df['사이트명'] = display_df['충전소명']
+            else:
+                display_df = filtered_df
+                display_df['사이트명'] = display_df['충전소명']
+
+            # 지표 표시
+            m1, m2 = st.columns(2)
+            m1.metric("검색 결과 사이트", f"{len(display_df):,} 개")
+            m2.metric("총 충전기 수", f"{len(filtered_df):,} 대")
+
+            # 탭 전환 시 검색 반복 없음
+            tab1, tab2 = st.tabs(["📊 데이터 목록", "📍 지도 분포"])
             
-            primary_addresses = run_query(sql_primary)
+            with tab1:
+                st.dataframe(display_df, use_container_width=True)
 
-            if not primary_addresses.empty:
-                unique_addresses = primary_addresses['도로명주소'].dropna().unique().tolist()
-                address_list_str = "', '".join([addr.replace("'", "''") for addr in unique_addresses])
-                sql_final = f"SELECT * FROM env_data WHERE 도로명주소 IN ('{address_list_str}')"
-                df_raw = run_query(sql_final)
-
-                # 3. 파이썬 정밀 필터링 (제외어 처리 및 전체 텍스트 검사)
-                def advanced_filter(row):
-                    row_str = " ".join(row.astype(str).values)
-                    for w in include_words:
-                        if w not in row_str: return False
-                    for w in exclude_words:
-                        if w in row_str: return False
-                    return True
-
-                df_result = df_raw[df_raw.apply(advanced_filter, axis=1)].copy()
-
-                if not df_result.empty:
-                    # 기본 정보 생성
-                    df_result['충전기대수'] = 1
-                    df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
-                    
-                    # 사이트 통합 로직
-                    group_cols = ['통합주소']
-                    if '운영기관명칭' in df_result.columns: group_cols.append('운영기관명칭')
-                    
-                    site_names = df_result.groupby(group_cols)['충전소명'].first().reset_index()
-                    site_names.rename(columns={'충전소명': '사이트명'}, inplace=True)
-                    df_result = pd.merge(df_result, site_names, on=group_cols, how='left')
-
-                    if view_mode == "사이트별 통합":
-                        final_group_keys = ['통합주소', '사이트명']
-                        if '운영기관명칭' in df_result.columns: final_group_keys.append('운영기관명칭')
-                        agg_rules = {col: 'first' for col in selected_display_cols if col not in final_group_keys}
-                        agg_rules['충전기대수'] = 'count'
-                        if '위치정보' in df_result.columns: agg_rules['위치정보'] = 'first'
-                        target_df = df_result.groupby(final_group_keys).agg(agg_rules).reset_index()
-                    else:
-                        target_df = df_result
-                        target_df['사이트명'] = target_df['충전소명']
-
-                    # --- 검색 결과 요약 지표 ---
-                    m1, m2 = st.columns(2)
-                    m1.metric("검색된 총 사이트 수", f"{len(df_result['통합주소'].unique()):,} 개")
-                    m2.metric("검색된 총 충전기 수", f"{len(df_result):,} 대")
-
-                    # --- 결과 탭 ---
-                    tab1, tab2 = st.tabs(["📊 데이터 목록", "📍 지도 분포"])
-
-                    with tab1:
-                        show_cols = ['사이트명', '충전기대수']
-                        extra_cols = [c for c in selected_display_cols if c not in show_cols and c in target_df.columns]
-                        final_show = show_cols + extra_cols
-                        display_df = target_df[final_show].copy()
-                        display_df.index = range(1, len(display_df) + 1)
-                        st.dataframe(display_df, use_container_width=True)
-                        st.download_button("결과 CSV 저장", data=display_df.to_csv(index=False).encode('utf-8-sig'), file_name="search_results.csv")
-
-                    with tab2:
-                        if HAS_MAP_LIBS:
-                            map_df = parse_lat_lon(target_df.copy()).dropna(subset=['lat', 'lon'])
-                            if not map_df.empty:
-                                # 지도 생성
-                                m = folium.Map(location=[map_df['lat'].mean(), map_df['lon'].mean()], 
-                                               zoom_start=12, tiles=map_style)
-                                
-                                # 모든 점을 개별 CircleMarker로 표시 (합쳐지지 않음)
-                                for _, row in map_df.iterrows():
-                                    color = 'blue' if '에버온' in str(row['운영기관명칭']) else 'red'
-                                    popup_html = f"""
-                                    <div style='width:180px; font-size:12px;'>
-                                        <b>{row['사이트명']}</b><br>
-                                        운영: {row['운영기관명칭']}<br>
-                                        충전기: {row.get('충전기대수', 1)}대<br>
-                                        주소: {row['도로명주소']}
-                                    </div>
-                                    """
-                                    folium.CircleMarker(
-                                        location=[row['lat'], row['lon']],
-                                        radius=6,
-                                        color=color,
-                                        fill=True,
-                                        fill_color=color,
-                                        fill_opacity=0.6,
-                                        popup=folium.Popup(popup_html, max_width=250)
-                                    ).add_to(m)
-                                
-                                st_folium(m, width=None, height=600, use_container_width=True)
-                            else:
-                                st.warning("위치 정보(좌표)가 포함된 결과가 없습니다.")
-                        else:
-                            st.error("지도 라이브러리가 설치되지 않았습니다. 터미널에서 'pip install streamlit-folium folium'을 실행하세요.")
-
-            else:
-                st.warning("조건에 맞는 검색 결과가 없습니다.")
+            with tab2:
+                if HAS_MAP_LIBS:
+                    map_ready = display_df.dropna(subset=['lat', 'lon'])
+                    if not map_ready.empty:
+                        m = folium.Map(location=[map_ready['lat'].mean(), map_ready['lon'].mean()], zoom_start=12, tiles=map_style)
+                        for _, row in map_ready.iterrows():
+                            color = 'blue' if '에버온' in str(row['운영기관명칭']) else 'red'
+                            folium.CircleMarker(
+                                location=[row['lat'], row['lon']],
+                                radius=6, color=color, fill=True, fill_opacity=0.6,
+                                popup=f"<b>{row['사이트명']}</b><br>{row['운영기관명칭']}<br>{row['충전기대수']}대"
+                            ).add_to(m)
+                        st_folium(m, width=None, height=600, use_container_width=True, key="main_map")
+                else:
+                    st.error("지도 라이브러리가 없습니다.")
+        else:
+            st.warning("결과가 없습니다.")
     else:
-        st.info("검색어를 입력하시면 분석 결과와 지도가 나타납니다. (예: 아파트 !에버온)")
+        st.info("검색어를 입력해 주세요.")
 
 except Exception as e:
-    st.error(f"시스템 오류 발생: {e}")
-
-st.divider()
-st.caption("© 2026 환경부 데이터 검색 서비스 - 고속 엔진 작동 중")
+    st.error(f"오류: {e}")
