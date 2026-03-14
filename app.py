@@ -60,8 +60,24 @@ def style_by_operator(row):
 
 # --- 2. 앱 설정 ---
 st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.3", layout="wide")
-prepare_db()
 
+st.markdown("""
+    <style>
+    /* multiselect 선택된 항목(Chip) 배경색 변경 */
+    span[data-baseweb="tag"] {
+        background-color: #0066CC !important;
+    }
+    /* 체크박스, 라디오버튼 등 액센트 컬러 변경 */
+    div[data-testid="stMarkdownContainer"] em {
+        color: #0066CC;
+    }
+    .st-be {
+        background-color: #0066CC !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+prepare_db()
 @st.cache_data
 def get_column_names():
     with sqlite3.connect(DB_NAME) as conn:
@@ -77,7 +93,7 @@ try:
     with s_col1:
         search_target = st.selectbox("검색 항목", ["전체"] + all_cols)
     with s_col2:
-        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')")
+        search_query = st.text_input("검색어 입력 (예: '파인에비뉴 에버온')")
 
     if search_query:
         with st.spinner('데이터 분석 중...'):
