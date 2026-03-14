@@ -1,3 +1,4 @@
 streamlit
 pandas
-gdown
+streamlit-folium
+folium
