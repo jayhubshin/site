@@ -63,6 +63,20 @@ st.set_page_config(page_title="환경부 통합 검색 & 통계 시스템 v1.2.5
 
 st.markdown("""
     <style>
+    /* 1. 상단 공백(여백) 제거 */
+    .block-container {
+        padding-top: 1rem !important;    /* 기본 약 6rem에서 1rem으로 대폭 축소 */
+        padding-bottom: 0rem !important;
+        padding-left: 3rem !important;
+        padding-right: 3rem !important;
+    }
+    
+    /* 2. 타이틀 자체의 상단 여백 제거 */
+    h1 {
+        margin-top: -1.5rem !important;
+        padding-top: 0 !important;
+        padding-bottom: 1rem !important;
+    }
     /* 1. multiselect 전체 배경 및 선택된 항목(Chip) 디자인 */
     span[data-baseweb="tag"] {
         background-color: #E3F2FD !important; /* 부드러운 파란색 배경 */
