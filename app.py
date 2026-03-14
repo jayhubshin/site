@@ -30,12 +30,13 @@ def extract_base_address(address):
 def parse_lat_lon(df):
     """위경도 파싱 및 한국 범위 유효성 검사 (백지 현상 방지)"""
     if '위치정보' in df.columns:
+        # 공백 제거 및 콤마 기준 분리
         coords = df['위치정보'].astype(str).str.replace(' ', '').str.split(',', expand=True)
         if coords.shape[1] >= 2:
             df['lat'] = pd.to_numeric(coords[0], errors='coerce')
             df['lon'] = pd.to_numeric(coords[1], errors='coerce')
             df = df.dropna(subset=['lat', 'lon'])
-            # 한국 인근 좌표만 남기기
+            # 한국 인근 좌표만 필터링 (위도 33~39, 경도 124~132)
             df = df[(df['lat'] > 32) & (df['lat'] < 40) & (df['lon'] > 124) & (df['lon'] < 132)]
     return df
 
@@ -54,26 +55,15 @@ try:
     st.title("🚀 환경부 통합 검색 & 지도")
     
     # --- 3. 설정 영역 ---
-    with st.expander("⚙️ 보기 방식 및 지도 테마 설정", expanded=True):
-        c1, c2, c3 = st.columns([1.2, 3, 1.5])
+    with st.expander("⚙️ 보기 방식 및 컬럼 설정", expanded=True):
+        c1, c2 = st.columns([1, 3])
         with c1:
             view_mode = st.radio("보기 방식", ["사이트별 통합", "상세 데이터"], index=0)
         with c2:
-            # 사이트명, 충전기대수를 포함한 기본 표시 컬럼 설정
             requested_cols = ['사이트명', '충전기대수', '충전소명', '도로명주소', '운영기관명칭', '충전용량', '운영개시일', '설치년도']
             display_options = ['사이트명', '충전기대수'] + [c for c in all_cols if c not in ['사이트명', '충전기대수']]
             actual_default = [c for c in requested_cols if c in display_options]
             selected_display_cols = st.multiselect("표시 컬럼", options=display_options, default=actual_default)
-        with c3:
-            map_theme_label = st.selectbox("🗺️ 지도 스타일", [
-                "Road (눈이 편한 스타일)", "Silver (깔끔한 회색조)", "Light (기본 주간)", "Dark (야간)"
-            ])
-            theme_dict = {
-                "Road (눈이 편한 스타일)": "mapbox://styles/mapbox/streets-v11",
-                "Silver (깔끔한 회색조)": "mapbox://styles/mapbox/light-v9",
-                "Light (기본 주간)": "light",
-                "Dark (야간)": "dark"
-            }
 
     st.divider()
     
@@ -82,20 +72,20 @@ try:
     with s_col1:
         search_target = st.selectbox("검색 항목", ["전체"] + all_cols)
     with s_col2:
-        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')")
+        search_query = st.text_input("검색어 입력 (예: '산들 !에버온')", placeholder="검색어를 입력하고 엔터를 누르세요.")
 
     if search_query:
-        with st.spinner('조회 중...'):
+        with st.spinner('데이터 조회 중...'):
             keywords = search_query.split()
             include_words = [w for w in keywords if not w.startswith('!')]
             exclude_words = [w[1:] for w in keywords if w.startswith('!') and len(w) > 1]
 
-            # SQL 기초 검색
+            # SQL 기초 검색 (첫 번째 단어 기준)
             base_word = include_words[0] if include_words else ""
-            sql = f"SELECT * FROM env_data WHERE (도로명주소 LIKE '%{base_word}%' OR 충전소명 LIKE '%{base_word}%') LIMIT 5000"
+            sql = f"SELECT * FROM env_data WHERE (도로명주소 LIKE '%{base_word}%' OR 충전소명 LIKE '%{base_word}%' OR 운영기관명칭 LIKE '%{base_word}%') LIMIT 5000"
             df_raw = run_query(sql)
 
-            # 상세 필터링 (순서 무관 & 제외어)
+            # 상세 필터링 (순서 무관 포함 및 제외어 적용)
             def advanced_filter(row):
                 row_str = " ".join(row.astype(str).values)
                 return all(w in row_str for w in include_words) and not any(w in row_str for w in exclude_words)
@@ -103,7 +93,7 @@ try:
             df_result = df_raw[df_raw.apply(advanced_filter, axis=1)].copy()
 
             if not df_result.empty:
-                # 공통 가공 (사이트명 생성 핵심 로직)
+                # 사이트명 및 충전기대수 생성 로직
                 df_result['충전기대수'] = 1
                 df_result['통합주소'] = df_result['도로명주소'].apply(extract_base_address)
                 
@@ -113,7 +103,7 @@ try:
                 site_map.rename(columns={'충전소명': '사이트명'}, inplace=True)
                 df_result = pd.merge(df_result, site_map, on=group_keys, how='left')
 
-                # 보기 모드별 데이터 확정
+                # 보기 모드 적용
                 if view_mode == "사이트별 통합":
                     agg_dict = {col: 'first' for col in df_result.columns if col not in group_keys + ['사이트명', '충전기대수']}
                     agg_dict['충전기대수'] = 'count'
@@ -125,17 +115,15 @@ try:
                 tab1, tab2 = st.tabs(["📊 데이터 목록", "📍 지도 분포"])
 
                 with tab1:
-                    # 행 색상 함수
+                    # 행 색상 스타일 (에버온: 하늘색, 기타: 분홍색)
                     def style_rows(row):
                         color = '#E3F2FD' if '에버온' in str(row['운영기관명칭']) else '#FFEBEE'
                         return [f'background-color: {color}'] * len(row)
 
-                    # 컬럼 정리
                     final_cols = [c for c in selected_display_cols if c in target_df.columns]
                     display_df = target_df[final_cols].copy()
                     display_df.index = range(1, len(display_df) + 1)
 
-                    # 스타일 적용
                     styled_df = display_df.style.apply(style_rows, axis=1)
                     if '충전기대수' in display_df.columns:
                         styled_df = styled_df.set_properties(subset=['충전기대수'], **{'text-align': 'center'})
@@ -145,25 +133,35 @@ try:
                 with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
+                        # 점 색상: 에버온(진파랑), 기타(진빨강)
                         map_df['color'] = map_df['운영기관명칭'].apply(
-                            lambda x: [0, 102, 204, 200] if '에버온' in str(x) else [204, 0, 0, 200]
+                            lambda x: [0, 102, 204, 220] if '에버온' in str(x) else [204, 0, 0, 220]
                         )
+                        
+                        # 지도 설정: 스타일 'light' 고정
                         st.pydeck_chart(pdk.Deck(
-                            map_style=theme_dict[map_theme_label],
+                            map_style="light",  # 요청하신 기본 주간 스타일
                             initial_view_state=pdk.ViewState(
                                 latitude=map_df['lat'].median(),
                                 longitude=map_df['lon'].median(),
-                                zoom=10
+                                zoom=10,
+                                pitch=0
                             ),
                             layers=[pdk.Layer(
-                                "ScatterplotLayer", map_df, get_position='[lon, lat]',
-                                get_color='color', get_radius=100, pickable=True,
-                                stroked=True, get_line_color=[255, 255, 255]
+                                "ScatterplotLayer",
+                                map_df,
+                                get_position='[lon, lat]',
+                                get_color='color',
+                                get_radius=120,
+                                pickable=True,
+                                stroked=True,
+                                line_width_min_pixels=1,
+                                get_line_color=[255, 255, 255]
                             )],
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
                     else:
-                        st.warning("유효한 좌표 정보가 없습니다.")
+                        st.warning("유효한 좌표 정보가 없어 지도를 표시할 수 없습니다.")
             else:
                 st.warning("결과가 없습니다.")
 except Exception as e:
