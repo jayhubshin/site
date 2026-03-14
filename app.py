@@ -59,24 +59,46 @@ def style_by_operator(row):
     return [f'background-color: {bg_color}'] * len(row)
 
 # --- 2. 앱 설정 ---
-st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.3", layout="wide")
+st.set_page_config(page_title="환경부 고속 검색 시스템 v1.2.5", layout="wide")
 
 st.markdown("""
     <style>
-    /* multiselect 선택된 항목(Chip) 배경색 변경 */
+    /* 1. multiselect 전체 배경 및 선택된 항목(Chip) 디자인 */
     span[data-baseweb="tag"] {
-        background-color: blue !important;
+        background-color: #E3F2FD !important; /* 부드러운 파란색 배경 */
+        border: 1px solid #2196F3 !important; /* 파란색 테두리 */
+        border-radius: 4px !important;
+        padding-right: 5px !important;
     }
-    /* 2. 칩 내부의 X 아이콘 색상도 흰색으로 변경 */
+    
+    /* 2. 칩 내부 글자 색상 (진한 파란색으로 가독성 확보) */
+    span[data-baseweb="tag"] span {
+        color: #0D47A1 !important;
+        font-weight: 600 !important;
+        font-size: 0.85rem !important;
+    }
+    
+    /* 3. 삭제 아이콘(X) 디자인 */
     span[data-baseweb="tag"] svg {
-        fill: blue !important;
+        fill: #1976D2 !important;
+        transition: transform 0.2s;
     }
-    /* 체크박스, 라디오버튼 등 액센트 컬러 변경 */
-    div[data-testid="stMarkdownContainer"] em {
-        color: blue;
+    
+    span[data-baseweb="tag"] svg:hover {
+        fill: #D32F2F !important; /* 마우스 올리면 빨간색으로 변경 */
+        transform: scale(1.2);
     }
-    .st-be {
-        background-color: #E3F2FD !important;
+
+    /* 4. '표시 컬럼 수정' 라벨 폰트 조정 */
+    div[data-testid="stMarkdownContainer"] p {
+        font-weight: bold !important;
+        color: #333 !important;
+    }
+    
+    /* 5. 데이터프레임 내 사이트명 강조 (선택 사항) */
+    .stDataFrame [data-testid="stTable"] td:first-child {
+        background-color: #F0F7FF !important;
+        font-weight: bold;
     }
     </style>
     """, unsafe_allow_html=True)
