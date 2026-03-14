@@ -118,14 +118,41 @@ try:
                 with tab2:
                     map_df = parse_lat_lon(target_df.copy())
                     if not map_df.empty:
-                        map_df['color'] = map_df['운영기관명칭'].apply(lambda x: [0, 102, 204, 220] if '에버온' in str(x) else [204, 0, 0, 220])
+                        # 1. 점 색상 설정 (에버온: 하늘색 계열, 기타: 빨간색 계열)
+                        map_df['color'] = map_df['운영기관명칭'].apply(
+                            lambda x: [0, 102, 204, 200] if '에버온' in str(x) else [204, 0, 0, 200]
+                        )
+                        
+                        # 2. 충전기 대수에 따른 반지름(Radius) 계산 로직
+                        # 대수가 1대인 곳도 잘 보이게 기본값 80을 주고, 한 대당 30씩 커지도록 설정
+                        # (예: 1대=110, 5대=230, 10대=380)
+                        map_df['radius'] = 80 + (map_df['충전기대수'] * 30)
+                        
                         st.pydeck_chart(pdk.Deck(
                             map_style="light",
-                            initial_view_state=pdk.ViewState(latitude=map_df['lat'].median(), longitude=map_df['lon'].median(), zoom=10),
-                            layers=[pdk.Layer("ScatterplotLayer", map_df, get_position='[lon, lat]', get_color='color', get_radius=120, pickable=True, stroked=True, get_line_color=[255, 255, 255])],
+                            initial_view_state=pdk.ViewState(
+                                latitude=map_df['lat'].median(),
+                                longitude=map_df['lon'].median(),
+                                zoom=10,
+                                pitch=0
+                            ),
+                            layers=[
+                                pdk.Layer(
+                                    "ScatterplotLayer",
+                                    map_df,
+                                    get_position='[lon, lat]',
+                                    get_color='color',
+                                    get_radius='radius',  # 계산된 radius 컬럼 사용
+                                    pickable=True,
+                                    stroked=True,
+                                    line_width_min_pixels=1,
+                                    get_line_color=[255, 255, 255]
+                                )
+                            ],
                             tooltip={"html": "<b>{사이트명}</b><br/>{운영기관명칭}<br/>충전기: {충전기대수}대"}
                         ))
-
+                    else:
+                        st.warning("지도에 표시할 유효한 좌표가 없습니다.")
                 with tab3:
                     st.subheader("🏢 운영기관별 요약 통계")
                     # 운영기관명칭별 사이트수 및 충전기수 집계
