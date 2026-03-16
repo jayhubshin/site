@@ -253,6 +253,15 @@ try:
                     # 통계 테이블에도 색상 적용
                     styled_op_sum = op_sum.style.apply(style_by_operator, axis=1)
                     st.dataframe(styled_op_sum, use_container_width=True, hide_index=True)
+                    st.divider()
+                    st.subheader("📅 연도별 운영기관 설치 추이")
+                    if '설치년도' in df_result.columns:
+                        df_result['설치년도_clean'] = df_result['설치년도'].astype(str).str.extract(r'(\d{4})')
+                        yr_op_sum = df_result.groupby(['설치년도_clean', '운영기관명칭']).agg(충전기수=('충전기대수', 'sum'), 사이트수=('사이트명', 'nunique')).reset_index()
+                        yr_op_sum = yr_op_sum.sort_values(['설치년도_clean', '충전기수'], ascending=[False, False])
+                        st.dataframe(yr_op_sum, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("데이터에 '설치년도' 정보가 없습니다.")
             else:
                 st.warning("결과가 없습니다.")
     else:
